@@ -1,6 +1,8 @@
+import errno
 import logging
 import os
-import errno
+import stat
+import time
 from fuse import FUSE, FuseOSError, Operations
 from telegram import Update, InputFile
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
@@ -18,35 +20,49 @@ TOKEN = os.getenv('TOKEN')
 USER_ID = os.getenv('USER_ID')
 MOUNT_POINT = os.getenv('MOUNT_POINT')
 
-class LocalFS(Operations):
+
+class MemoryFS(Operations):
+    def __init__(self):
+        self.files = {}
+        self.data = {}
+        now = time.time()
+        self.files['/'] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
+
     def getattr(self, path, fh=None):
-        st = os.lstat(path)
-        return dict((key, getattr(st, key)) for key in ('st_atime', 'st_ctime',
-                                                        'st_gid', 'st_mode', 'st_mtime',
-                                                        'st_nlink', 'st_size', 'st_uid'))
+        if path not in self.files:
+            raise FuseOSError(errno.ENOENT)
+        return self.files[path]
 
     def readdir(self, path, fh):
-        return ['.', '..'] + os.listdir(path)
+        return ['.', '..'] + [x[1:] for x in self.files if x != '/' and x.startswith(path)]
 
-    def read(self, path, size, offset, fh):
-        with open(path, 'rb') as f:
-            f.seek(offset)
-            return f.read(size)
+    def create(self, path, mode):
+        self.files[path] = dict(st_mode=(stat.S_IFREG | mode), st_nlink=1, st_size=0,
+                                st_ctime=time.time(), st_mtime=time.time(), st_atime=time.time())
+        self.data[path] = b''
+        return 0
 
     def write(self, path, data, offset, fh):
-        with open(path, 'r+b') as f:
-            f.seek(offset)
-            f.write(data)
+        self.data[path] = self.data[path][:offset] + data
+        self.files[path]['st_size'] = len(self.data[path])
         return len(data)
 
-    def create(self, path, mode, fi=None):
-        with open(path, 'w') as f:
-            pass
-        return 0
+    def read(self, path, size, offset, fh):
+        return self.data[path][offset:offset + size]
+
+    def mkdir(self, path, mode):
+        self.files[path] = dict(st_mode=(stat.S_IFDIR | mode), st_nlink=2,
+                                st_ctime=time.time(), st_mtime=time.time(), st_atime=time.time())
+        self.files['/']['st_nlink'] += 1
 
     def unlink(self, path):
-        os.unlink(path)
-        return 0
+        self.files.pop(path)
+        self.data.pop(path, None)
+
+    def rmdir(self, path):
+        self.files.pop(path)
+        self.files['/']['st_nlink'] -= 1
+
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Привет! Я готов принимать команды для работы с файловой системой.')
@@ -56,6 +72,8 @@ def start(update: Update, context: CallbackContext):
 def handle_message(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
+    logger.info(f"Received document from user_id: {user_id}")
+
     if user_id != int(USER_ID):
         update.message.reply_text('Вы не авторизованы для использования этой команды.')
         return ConversationHandler.END
@@ -63,18 +81,25 @@ def handle_message(update: Update, context: CallbackContext):
     document = update.message.document
     file_id = document.file_id
     filename = document.file_name
+    logger.info(f"Document received: file_id={file_id}, filename={filename}")
 
     file = context.bot.get_file(file_id)
-    local_path = MOUNT_POINT + filename
+    local_path = os.path.join(MOUNT_POINT, filename)
     file.download(local_path)
+    logger.info(f"File downloaded to: {local_path}")
 
     update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
     return ConversationHandler.END
 
 
 def main():
-    fuse = FUSE(LocalFS(), MOUNT_POINT, foreground=True)
+    if not os.path.exists(MOUNT_POINT):
+        os.makedirs(MOUNT_POINT)
 
+    # Запускаем файловую систему FUSE
+    FUSE(MemoryFS(), MOUNT_POINT, foreground=True)
+
+    # Настраиваем Telegram бота
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
