@@ -3,7 +3,7 @@ import os
 import errno
 from fuse import FUSE, FuseOSError, Operations
 from telegram import Update, InputFile
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from dotenv import load_dotenv
 
 logging.basicConfig(
@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 TOKEN = os.getenv('TOKEN')
-TELEGRAM_USER_ID = os.getenv('TELEGRAM_USER_ID')  # ID вашего пользователя в Telegram
+USER_ID = os.getenv('USER_ID')
+MOUNT_POINT = os.getenv('MOUNT_POINT')
 
 class LocalFS(Operations):
     def getattr(self, path, fh=None):
@@ -49,27 +50,30 @@ class LocalFS(Operations):
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Привет! Я готов принимать команды для работы с файловой системой.')
+    return ConversationHandler.END
+
 
 def handle_message(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
-    if user_id != int(TELEGRAM_USER_ID):
+    if user_id != int(USER_ID):
         update.message.reply_text('Вы не авторизованы для использования этой команды.')
-        return
+        return ConversationHandler.END
 
     document = update.message.document
     file_id = document.file_id
     filename = document.file_name
 
     file = context.bot.get_file(file_id)
-    local_path = '/path/to/mountpoint/' + filename
+    local_path = MOUNT_POINT + filename
     file.download(local_path)
 
     update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
+    return ConversationHandler.END
+
 
 def main():
-    mountpoint = "/path/to/mountpoint"  # Замените на путь к точке монтирования на вашей системе
-    fuse = FUSE(LocalFS(), mountpoint, foreground=True)
+    fuse = FUSE(LocalFS(), MOUNT_POINT, foreground=True)
 
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
@@ -79,6 +83,7 @@ def main():
 
     updater.start_polling()
     updater.idle()
+
 
 if __name__ == '__main__':
     main()
