@@ -4,7 +4,7 @@ import sys
 
 from telegram import Bot, MessageEntity
 from telegram.ext import Updater, MessageHandler, Filters
-from telegram_bot import handle_message, handle_private, handle_mention
+from telegram_bot import handle_file, handle_private, handle_mention, handle_mention_file
 from config import TOKEN
 from fs_utils import start_fuse, unmount_fs
 
@@ -28,8 +28,9 @@ def main():
     dp.add_handler(MessageHandler(Filters.text & Filters.chat_type.private, handle_private))
     dp.add_handler(MessageHandler(Filters.entity(MessageEntity.MENTION), handle_mention))
 
-    dp.add_handler(MessageHandler(Filters.document & Filters.chat_type.private, handle_message))
-    dp.add_handler(MessageHandler(Filters.document & Filters.entity(MessageEntity.MENTION), handle_message))
+    dp.add_handler(MessageHandler(Filters.document & Filters.chat_type.private, handle_file))
+    # TODO: fix this situation
+    dp.add_handler(MessageHandler(Filters.entity(MessageEntity.MENTION) & Filters.document, handle_mention_file))
 
     updater.start_polling()
     updater.idle()

@@ -8,6 +8,16 @@ from fs_utils import unmount_fs, start_fuse
 fuse_stopped = False
 
 
+def check_mention(update, context) -> bool:
+    if 'bot_username' not in context.user_data:
+        context.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
+
+    bot_username = context.user_data['bot_username']
+    entities = update.message.parse_entities([MessageEntity.MENTION]).values()
+
+    return bot_username in entities
+
+
 def handle_private(update, context):
     message_text = update.message.text
     if message_text == '/stop':
@@ -17,19 +27,12 @@ def handle_private(update, context):
 
 
 def handle_mention(update, context):
-    if 'bot_username' not in context.user_data:
-        context.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
-
-    bot_username = context.user_data['bot_username']
-    entities = update.message.parse_entities([MessageEntity.MENTION])
-
-    for entity in entities.values():
-        if entity == bot_username:
-            message_text = update.message.text
-            if '/start' in message_text:
-                start(update, context)
-            elif '/stop' in message_text:
-                stop(update, context)
+    if check_mention(update, context):
+        message_text = update.message.text
+        if '/start' in message_text:
+            start(update, context)
+        elif '/stop' in message_text:
+            stop(update, context)
 
 
 def start(update: Update, context: CallbackContext):
@@ -44,7 +47,13 @@ def start(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
-def handle_message(update: Update, context: CallbackContext):
+def handle_mention_file(update: Update, context: CallbackContext):
+    logger.info("handle_mention_file triggered")
+    if check_mention(update, context):
+        handle_file(update, context)
+
+
+def handle_file(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
     logger.info(f"Received document from chat_id: {chat_id}")
