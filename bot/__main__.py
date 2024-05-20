@@ -3,39 +3,15 @@ import signal
 import sys
 
 from telegram import Bot, MessageEntity
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from telegram_bot import start, handle_message, stop
-from config import TOKEN, logger
+from telegram.ext import Updater, MessageHandler, Filters
+from telegram_bot import handle_message, handle_private, handle_mention
+from config import TOKEN
 from fs_utils import start_fuse, unmount_fs
 
 
 def signal_handler(sig, frame):
     unmount_fs()
     sys.exit(0)
-
-
-def handle_private(update, context):
-    message_text = update.message.text
-    if message_text == '/stop':
-        stop(update, context)
-    elif message_text == '/start':
-        start(update, context)
-
-
-def handle_mention(update, context):
-    if 'bot_username' not in context.user_data:
-        context.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
-
-    bot_username = context.user_data['bot_username']
-    entities = update.message.parse_entities([MessageEntity.MENTION])
-
-    for entity in entities.values():
-        if entity == bot_username:
-            message_text = update.message.text
-            if '/start' in message_text:
-                start(update, context)
-            elif '/stop' in message_text:
-                stop(update, context)
 
 
 def main():
@@ -50,9 +26,10 @@ def main():
     dp.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
 
     dp.add_handler(MessageHandler(Filters.text & Filters.chat_type.private, handle_private))
-    dp.add_handler(MessageHandler(Filters.document & Filters.chat_type.private, handle_message))
-
     dp.add_handler(MessageHandler(Filters.entity(MessageEntity.MENTION), handle_mention))
+
+    dp.add_handler(MessageHandler(Filters.document & Filters.chat_type.private, handle_message))
+    dp.add_handler(MessageHandler(Filters.document & Filters.entity(MessageEntity.MENTION), handle_message))
 
     updater.start_polling()
     updater.idle()
