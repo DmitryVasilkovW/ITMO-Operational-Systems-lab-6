@@ -2,7 +2,7 @@ import os
 import threading
 from telegram import Update
 from telegram.ext import CallbackContext, ConversationHandler
-from config import logger, USER_ID, MOUNT_POINT
+from config import logger, MOUNT_POINT
 from fs_utils import unmount_fs, start_fuse
 
 fuse_stopped = False
@@ -20,15 +20,10 @@ def start(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
-
 def handle_message(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
     logger.info(f"Received document from user_id: {user_id}")
-
-    if user_id != int(USER_ID):
-        update.message.reply_text('Вы не авторизованы для использования этой команды.')
-        return ConversationHandler.END
 
     document = update.message.document
     file_id = document.file_id
@@ -49,10 +44,6 @@ def stop(update: Update, context: CallbackContext):
 
     user_id = update.message.from_user.id
     logger.info(f"Stop command received from user_id: {user_id}")
-
-    if user_id != int(USER_ID):
-        update.message.reply_text('Вы не авторизованы для использования этой команды.')
-        return ConversationHandler.END
 
     update.message.reply_text('Останавливаю работу файловой системы...')
 

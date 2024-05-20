@@ -10,6 +10,5 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv('TOKEN')
-USER_ID = os.getenv('USER_ID')
 MOUNT_POINT = os.getenv('MOUNT_POINT')
 STORAGE_PATH = os.getenv('STORAGE_PATH')
