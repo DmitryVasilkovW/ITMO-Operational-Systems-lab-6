@@ -47,13 +47,7 @@ def start(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
-def handle_mention_file(update: Update, context: CallbackContext):
-    logger.info("handle_mention_file triggered")
-    if check_mention(update, context):
-        handle_file(update, context)
-
-
-def handle_file(update: Update, context: CallbackContext):
+def handle_file_save(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
     logger.info(f"Received document from chat_id: {chat_id}")
