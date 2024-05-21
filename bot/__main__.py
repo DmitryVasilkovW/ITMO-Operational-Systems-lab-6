@@ -3,8 +3,8 @@ import signal
 import sys
 
 from telegram import Bot, MessageEntity
-from telegram.ext import Updater, MessageHandler, Filters
-from telegram_bot import handle_file_save, handle_private, handle_mention
+from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler, CommandHandler
+from telegram_bot import handle_private, handle_mention, save_file_command, save_file
 from config import TOKEN
 from fs_utils import start_fuse, unmount_fs
 
@@ -25,10 +25,18 @@ def main():
     dp = updater.dispatcher
     dp.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
 
+    conv_handler_save_file_private = ConversationHandler(
+        entry_points=[CommandHandler('save', save_file_command)],
+        states={
+            'waiting_for_file': [MessageHandler(~Filters.command, save_file)]
+        },
+        fallbacks=[]
+    )
+
+    dp.add_handler(conv_handler_save_file_private)
+
     dp.add_handler(MessageHandler(Filters.text & Filters.chat_type.private, handle_private))
     dp.add_handler(MessageHandler(Filters.entity(MessageEntity.MENTION), handle_mention))
-
-    dp.add_handler(MessageHandler(Filters.document, handle_file_save))
 
     updater.start_polling()
     updater.idle()
