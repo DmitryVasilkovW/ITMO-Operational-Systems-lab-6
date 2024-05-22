@@ -1,5 +1,6 @@
 import os
 import threading
+import re
 
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
@@ -25,6 +26,8 @@ def handle_private(update, context):
         stop_command(update, context)
     elif message_text == '/start':
         start_command(update, context)
+    elif '/mkdir' in message_text:
+        mkdir(update, context)
 
 
 def handle_mention(update, context):
@@ -34,6 +37,8 @@ def handle_mention(update, context):
             start_command(update, context)
         elif '/stop' in message_text:
             stop_command(update, context)
+        elif '/mkdir' in message_text:
+            mkdir(update, context)
 
 
 def save_file_command(update, context):
@@ -70,31 +75,26 @@ def save_file(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
 
-def mkdir_command(update, context):
-    update.message.reply_text('Введите имя директории: ')
-    return 'mkdir_private'
-
-
-def mkdir_command_mention(update, context):
-    if check_mention(update, context):
-        update.message.reply_text('Введите имя директории: ')
-        return 'mkdir_mention'
-
-
 def mkdir(update, context):
-    directory_name = update.message.text.strip()
-    new_dir_path = os.path.join(MOUNT_POINT, directory_name)
+    logger.info('in mkdir')
+    match = re.search(r'/mkdir\s+(\S+)', update.message.text)
+    if match:
+        directory_name = match.group(1)
+        new_dir_path = os.path.join(MOUNT_POINT, directory_name)
 
-    try:
-        os.makedirs(new_dir_path, exist_ok=True)
-        update.message.reply_text(f"Директория {directory_name} успешно создана.")
-        chat_id = update.message.chat_id
-        user_id = update.message.from_user.id
-        logger.info(
-            f"Directory {directory_name} created successfully at {new_dir_path} from chat_id {chat_id} and user_id {user_id}.")
-    except Exception as e:
-        logger.error(f"Error creating directory {directory_name}: {e}")
-        update.message.reply_text(f"Ошибка при создании директории: {e}")
+        try:
+            os.makedirs(new_dir_path, exist_ok=True)
+            update.message.reply_text(f"Директория {directory_name} успешно создана.")
+            chat_id = update.message.chat_id
+            user_id = update.message.from_user.id
+            logger.info(
+                f"Directory {directory_name} created successfully at {new_dir_path} from chat_id {chat_id} and user_id {user_id}.")
+        except Exception as e:
+            logger.error(f"Error creating directory {directory_name}: {e}")
+            update.message.reply_text(f"Ошибка при создании директории: {e}")
+    else:
+        update.message.reply_text(
+            "Ошибка: не удалось извлечь имя директории. Убедитесь, что команда введена правильно.")
 
     return ConversationHandler.END
 
