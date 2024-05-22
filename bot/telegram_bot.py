@@ -38,17 +38,13 @@ def handle_mention(update, context):
 
 def save_file_command(update, context):
     update.message.reply_text('Отправьте файл: ')
-
     return 'waiting_for_file_private'
 
 
 def save_file_mention_command(update, context):
-    logger.info('in save mention')
     if check_mention(update, context):
         update.message.reply_text('Отправьте файл: ')
         return 'waiting_for_file_mention'
-
-    return ConversationHandler.END
 
 
 def save_file(update: Update, context: CallbackContext):
@@ -72,6 +68,35 @@ def save_file(update: Update, context: CallbackContext):
     else:
         update.message.reply_text("Пожалуйста, отправьте документ.")
         return ConversationHandler.END
+
+
+def mkdir_command(update, context):
+    update.message.reply_text('Введите имя директории: ')
+    return 'mkdir_private'
+
+
+def mkdir_command_mention(update, context):
+    if check_mention(update, context):
+        update.message.reply_text('Введите имя директории: ')
+        return 'mkdir_mention'
+
+
+def mkdir(update, context):
+    directory_name = update.message.text.strip()
+    new_dir_path = os.path.join(MOUNT_POINT, directory_name)
+
+    try:
+        os.makedirs(new_dir_path, exist_ok=True)
+        update.message.reply_text(f"Директория {directory_name} успешно создана.")
+        chat_id = update.message.chat_id
+        user_id = update.message.from_user.id
+        logger.info(
+            f"Directory {directory_name} created successfully at {new_dir_path} from chat_id {chat_id} and user_id {user_id}.")
+    except Exception as e:
+        logger.error(f"Error creating directory {directory_name}: {e}")
+        update.message.reply_text(f"Ошибка при создании директории: {e}")
+
+    return ConversationHandler.END
 
 
 def start_command(update: Update, context: CallbackContext):
