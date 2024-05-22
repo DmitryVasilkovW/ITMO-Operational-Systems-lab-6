@@ -43,12 +43,14 @@ def handle_mention(update, context):
 
 def save_file_command(update, context):
     update.message.reply_text('Отправьте файл: ')
+    context.user_data['save_context'] = 'waiting_for_file_private'
     return 'waiting_for_file_private'
 
 
 def save_file_mention_command(update, context):
     if check_mention(update, context):
         update.message.reply_text('Отправьте файл: ')
+        context.user_data['save_context'] = 'waiting_for_file_mention'
         return 'waiting_for_file_mention'
 
 
@@ -63,8 +65,15 @@ def save_file(update: Update, context: CallbackContext):
         logger.info(f"Received document from user_id: {user_id}")
         logger.info(f"Document received: file_id={file_id}, filename={filename}")
 
-        file = context.bot.get_file(file_id)
         local_path = os.path.join(MOUNT_POINT, filename)
+
+        if os.path.exists(local_path):
+            update.message.reply_text(
+                f"Файл с именем {filename} уже существует. Пожалуйста, отправьте файл с другим именем.")
+            return context.user_data['save_context']
+
+
+        file = context.bot.get_file(file_id)
         file.download(local_path)
         logger.info(f"File downloaded to: {local_path}")
 
