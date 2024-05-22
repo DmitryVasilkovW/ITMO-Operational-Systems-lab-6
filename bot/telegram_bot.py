@@ -39,7 +39,16 @@ def handle_mention(update, context):
 def save_file_command(update, context):
     update.message.reply_text('Отправьте файл: ')
 
-    return 'waiting_for_file'
+    return 'waiting_for_file_private'
+
+
+def save_file_mention_command(update, context):
+    logger.info('in save mention')
+    if check_mention(update, context):
+        update.message.reply_text('Отправьте файл: ')
+        return 'waiting_for_file_mention'
+
+    return ConversationHandler.END
 
 
 def save_file(update: Update, context: CallbackContext):
