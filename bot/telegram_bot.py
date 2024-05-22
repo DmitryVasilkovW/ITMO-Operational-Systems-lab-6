@@ -1,8 +1,11 @@
 import os
 import threading
+import re
 
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
+
+from bot.converter import convert_png_to_jpg
 from config import logger, MOUNT_POINT, TOKEN
 from fs_utils import unmount_fs, start_fuse
 
@@ -21,19 +24,45 @@ def check_mention(update, context) -> bool:
 
 def handle_private(update, context):
     message_text = update.message.text
+
     if message_text == '/stop':
         stop_command(update, context)
+
     elif message_text == '/start':
         start_command(update, context)
 
+    elif message_text.startswith('/convert '):
+        match = re.search(r'/convert (\S+)', message_text)
+
+        if match:
+            path = match.group(1)
+
+            if os.path.exists(path):
+                convert_command(update, context, path)
+            else:
+                update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
 
 def handle_mention(update, context):
+
     if check_mention(update, context):
         message_text = update.message.text
+
         if '/start' in message_text:
             start_command(update, context)
+
         elif '/stop' in message_text:
             stop_command(update, context)
+
+        elif '/convert ' in message_text:
+            match = re.search(r'/convert (\S+)', message_text)
+
+            if match:
+                path = match.group(1)
+
+                if os.path.exists(path):
+                    convert_command(update, context, path)
+                else:
+                    update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
 
 
 def save_file_command(update, context):
@@ -123,5 +152,25 @@ def stop_command(update: Update, context: CallbackContext):
     fuse_stopped = True
 
     logger.info("Fuse stopped")
+
+    return ConversationHandler.END
+
+
+def convert_command(update: Update, context: CallbackContext, path):
+    try:
+        for filename in os.listdir(path):
+            if filename.endswith(".png"):
+                png_path = os.path.join(path, filename)
+                convert_png_to_jpg(png_path)
+
+        update.message.reply_text(f"Файлы в директории {path} успешно обработаны.")
+        chat_id = update.message.chat_id
+        user_id = update.message.from_user.id
+
+        logger.info(
+            f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
+    except Exception as e:
+        logger.error(f"Error processing files in directory {path}: {e}")
+        update.message.reply_text(f"Ошибка при обработке файлов в директории: {e}")
 
     return ConversationHandler.END
