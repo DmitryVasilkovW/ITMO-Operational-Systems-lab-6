@@ -84,11 +84,22 @@ def save_file(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
 
-def mkdir(update, context):
-    logger.info('in mkdir')
+def mkdir(update: Update, context: CallbackContext):
     match = re.search(r'/mkdir\s+(\S+)', update.message.text)
     if match:
         directory_name = match.group(1)
+
+        logger.info(match)
+        if re.search(r'/mkdir\s+(\S+)\ (\S+)', update.message.text) is not None:
+            update.message.reply_text(
+                "Ошибка: команда должна содержать только одно слово.")
+            return ConversationHandler.END
+
+        if '/' in directory_name:
+            update.message.reply_text(
+                "Ошибка: команда должна содержать только одно слово без символов '/'.")
+            return ConversationHandler.END
+
         new_dir_path = os.path.join(MOUNT_POINT, directory_name)
 
         try:
