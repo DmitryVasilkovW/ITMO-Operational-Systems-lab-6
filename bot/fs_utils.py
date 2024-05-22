@@ -13,7 +13,7 @@ def check_mount():
 def mount_fs():
     global memory_fs
     memory_fs = MemoryFS(STORAGE_PATH)
-    FUSE(memory_fs, MOUNT_POINT, foreground=True, nonempty=True)
+    FUSE(memory_fs, MOUNT_POINT, foreground=True, nonempty=True, rw=True)
     logger.info(f"File system successfully mounted at {MOUNT_POINT}")
 
 

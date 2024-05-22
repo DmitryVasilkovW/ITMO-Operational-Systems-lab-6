@@ -1,16 +1,16 @@
 import os
 import threading
 import re
+import shutil
 
-from telegram import Update, MessageEntity, Bot
+from telegram import Update, MessageEntity, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
-from bot.converter import convert_png_to_jpg
+from bot.converter import convert_png_to_jpg, create_empty_jpg
 from config import logger, MOUNT_POINT, TOKEN
 from fs_utils import unmount_fs, start_fuse
 
 fuse_stopped = False
-
 
 def check_mention(update, context) -> bool:
     if 'bot_username' not in context.user_data:
@@ -155,15 +155,22 @@ def stop_command(update: Update, context: CallbackContext):
 
     return ConversationHandler.END
 
-
 def convert_command(update: Update, context: CallbackContext, path):
     try:
+        converted_files = []
+
         for filename in os.listdir(path):
             if filename.endswith(".png"):
                 png_path = os.path.join(path, filename)
-                convert_png_to_jpg(png_path)
+                output_path_jpg = os.path.join(MOUNT_POINT, filename[:-3] + 'jpg')
+                output_path_png = os.path.join(MOUNT_POINT, filename)
+                create_empty_jpg(output_path_jpg)
+                shutil.copy(png_path, output_path_png)
+                converted_files.append(f"{filename} -> {filename[:-3]}jpg")
 
-        update.message.reply_text(f"Файлы в директории {path} успешно обработаны.")
+        converted_files_message = "\n".join(converted_files)
+
+        update.message.reply_text(f"Файлы в директории {path} успешно обработаны:\n{converted_files_message}")
         chat_id = update.message.chat_id
         user_id = update.message.from_user.id
 

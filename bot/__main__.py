@@ -3,7 +3,7 @@ import signal
 import sys
 
 from telegram import Bot, MessageEntity
-from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler, CommandHandler
+from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler, CommandHandler, CallbackQueryHandler
 from telegram_bot import handle_private, handle_mention, save_file_command, save_file, save_file_mention_command, \
     mkdir_command, mkdir, mkdir_command_mention
 from config import TOKEN

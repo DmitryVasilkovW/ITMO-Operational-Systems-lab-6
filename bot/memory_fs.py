@@ -12,7 +12,7 @@ class MemoryFS(Operations):
         self.data = {}
         self.storage_path = storage_path
         now = time.time()
-        self.files['/'] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
+        self.files['/'] = dict(st_mode=(stat.S_IFDIR | 0o777), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
         self.load_from_storage()
 
     def load_from_storage(self):
