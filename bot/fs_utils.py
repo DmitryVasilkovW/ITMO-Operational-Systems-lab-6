@@ -1,5 +1,5 @@
 import os
-from fuse import FUSE
+import llfuse
 from memory_fs import MemoryFS
 from config import MOUNT_POINT, STORAGE_PATH, logger
 
@@ -13,8 +13,14 @@ def check_mount():
 def mount_fs():
     global memory_fs
     memory_fs = MemoryFS(STORAGE_PATH)
-    FUSE(memory_fs, MOUNT_POINT, foreground=True, nonempty=True, rw=True)
+    llfuse.init(memory_fs, MOUNT_POINT, ['fsname=memoryfs', 'nonempty'])
     logger.info(f"File system successfully mounted at {MOUNT_POINT}")
+    try:
+        llfuse.main()
+    except:
+        llfuse.close(unmount=True)
+    memory_fs.save_to_storage()
+    logger.info(f"File system successfully unmounted from {MOUNT_POINT}")
 
 
 def unmount_fs():
