@@ -42,30 +42,11 @@ def main():
         fallbacks=[]
     )
 
-    conv_handler_mkdir_private = ConversationHandler(
-        entry_points=[CommandHandler('mkdir', mkdir_command)],
-        states={
-            'mkdir_private': [MessageHandler(Filters.text & ~Filters.command, mkdir)]
-        },
-        fallbacks=[]
-    )
-
-    conv_handler_mkdir_mention = ConversationHandler(
-        entry_points=[MessageHandler(Filters.entity(MessageEntity.MENTION) & Filters.regex(r'mkdir'),
-                                     mkdir_command_mention)],
-        states={
-            'mkdir_mention': [MessageHandler(Filters.text & ~Filters.command, mkdir)]
-        },
-        fallbacks=[]
-    )
-
     #########################################################
     # IMPORTANT! DO NOT CHANGE THE ORDER OF ADDING HANDLERS #
     #########################################################
     dp.add_handler(conv_handler_save_file_private)
     dp.add_handler(conv_handler_save_file_mention)
-    dp.add_handler(conv_handler_mkdir_private)
-    dp.add_handler(conv_handler_mkdir_mention)
 
     dp.add_handler(MessageHandler(Filters.command & Filters.chat_type.private, handle_private))
     dp.add_handler(MessageHandler(Filters.entity(MessageEntity.MENTION), handle_mention))

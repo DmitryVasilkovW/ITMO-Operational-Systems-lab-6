@@ -13,6 +13,7 @@ from fs_utils import unmount_fs, start_fuse
 
 fuse_stopped = False
 
+
 def check_mention(update, context) -> bool:
     if 'bot_username' not in context.user_data:
         context.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
@@ -43,14 +44,13 @@ def handle_private(update, context):
 
         if match:
             path = match.group(1)
-
             if os.path.exists(path):
                 convert_command(update, context, path)
             else:
                 update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
 
-def handle_mention(update, context):
 
+def handle_mention(update, context):
     if check_mention(update, context):
         message_text = update.message.text
 
@@ -219,6 +219,7 @@ def stop_command(update: Update, context: CallbackContext):
     logger.info("Fuse stopped")
     save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
     return ConversationHandler.END
+
 
 def convert_command(update: Update, context: CallbackContext, path):
     try:
