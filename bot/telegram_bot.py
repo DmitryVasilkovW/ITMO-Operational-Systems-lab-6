@@ -6,12 +6,12 @@ import re
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
+from bot.converter import convert_png_to_jpg, create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage
 from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
 
 fuse_stopped = False
-
 
 def check_mention(update, context) -> bool:
     if 'bot_username' not in context.user_data:
@@ -25,27 +25,57 @@ def check_mention(update, context) -> bool:
 
 def handle_private(update, context):
     message_text = update.message.text
+
     if message_text == '/stop':
         stop_command(update, context)
+
     elif message_text == '/start':
         start_command(update, context)
+
     elif '/mkdir' in message_text:
         mkdir(update, context)
+
     elif '/mv' in message_text:
         move(update, context)
 
+    elif message_text.startswith('/convert '):
+        match = re.search(r'/convert (\S+)', message_text)
+
+        if match:
+            path = match.group(1)
+
+            if os.path.exists(path):
+                convert_command(update, context, path)
+            else:
+                update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
 
 def handle_mention(update, context):
+
     if check_mention(update, context):
         message_text = update.message.text
+
         if '/start' in message_text:
             start_command(update, context)
+
         elif '/stop' in message_text:
             stop_command(update, context)
+
         elif '/mkdir' in message_text:
             mkdir(update, context)
+
         elif '/mv' in message_text:
             move(update, context)
+
+        elif '/convert ' in message_text:
+            match = re.search(r'/convert (\S+)', message_text)
+
+            if match:
+                path = match.group(1)
+
+                if os.path.exists(path):
+                    convert_command(update, context, path)
+                else:
+                    update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
 
 
 def save_file_command(update, context):
@@ -188,4 +218,31 @@ def stop_command(update: Update, context: CallbackContext):
 
     logger.info("Fuse stopped")
     save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+    return ConversationHandler.END
+
+def convert_command(update: Update, context: CallbackContext, path):
+    try:
+        converted_files = []
+
+        for filename in os.listdir(path):
+            if filename.endswith(".png"):
+                png_path = os.path.join(path, filename)
+                output_path_jpg = os.path.join(MOUNT_POINT, filename[:-3] + 'jpg')
+                output_path_png = os.path.join(MOUNT_POINT, filename)
+                create_empty_jpg(output_path_jpg)
+                shutil.copy(png_path, output_path_png)
+                converted_files.append(f"{filename} -> {filename[:-3]}jpg")
+
+        converted_files_message = "\n".join(converted_files)
+
+        update.message.reply_text(f"Файлы в директории {path} успешно обработаны:\n{converted_files_message}")
+        chat_id = update.message.chat_id
+        user_id = update.message.from_user.id
+
+        logger.info(
+            f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
+    except Exception as e:
+        logger.error(f"Error processing files in directory {path}: {e}")
+        update.message.reply_text(f"Ошибка при обработке файлов в директории: {e}")
+
     return ConversationHandler.END
