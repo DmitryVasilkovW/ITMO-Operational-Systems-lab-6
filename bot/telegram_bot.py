@@ -240,6 +240,8 @@ def convert_command(update: Update, context: CallbackContext, path):
         chat_id = update.message.chat_id
         user_id = update.message.from_user.id
 
+        save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+
         logger.info(
             f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
     except Exception as e:
