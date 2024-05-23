@@ -4,7 +4,7 @@ import threading
 import re
 
 from telegram import Update, MessageEntity, Bot
-from telegram.ext import CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
+from telegram.ext import CallbackContext, ConversationHandler
 
 from bot.collect_metadata import save_metadata_to_storage
 from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
@@ -97,7 +97,7 @@ def mkdir(update: Update, context: CallbackContext):
         directory_name = match.group(1)
 
         logger.info(match)
-        if re.search(r'/mkdir\s+(\S+)\ (\S+)', update.message.text) is not None:
+        if re.search(r'/mkdir\s+(\S+)\s+(\S+)', update.message.text) is not None:
             update.message.reply_text(
                 "Ошибка: команда должна содержать только одно слово.")
             return ConversationHandler.END
@@ -129,10 +129,8 @@ def mkdir(update: Update, context: CallbackContext):
 
 def move(update, context):
     message_text = update.message.text
-    match = re.search(r'/mv (\S+) (\S+)$', message_text)
+    match = re.search(r'/mv\s+(\S+)\s+(\S+)$', message_text)
 
-    logger.info(message_text)
-    logger.info(match)
     if match:
         source = match.group(1)
         destination = match.group(2)
@@ -141,6 +139,10 @@ def move(update, context):
 
         if not os.path.exists(source_path):
             update.message.reply_text(f"Ошибка: Исходный путь {source} не существует.")
+            return ConversationHandler.END
+
+        if not os.path.exists(destination_path):
+            update.message.reply_text(f"Ошибка: Путь назначения {destination} не существует.")
             return ConversationHandler.END
 
         try:
