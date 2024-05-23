@@ -2,7 +2,6 @@ import errno
 import time
 import stat
 import os
-import json
 import llfuse
 from llfuse import FUSEError, Operations
 
@@ -15,22 +14,6 @@ class MemoryFS(Operations):
         self.storage_path = storage_path
         now = time.time()
         self.files['/'] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
-        self.load_from_storage()
-
-    def load_from_storage(self):
-        if os.path.exists(self.storage_path):
-            with open(self.storage_path, 'r') as f:
-                state = json.load(f)
-                self.files = state['files']
-                self.data = {k: bytes(v, 'latin1') for k, v in state['data'].items()}
-
-    def save_to_storage(self):
-        state = {
-            'files': self.files,
-            'data': {k: v.decode('latin1') for k, v in self.data.items()}
-        }
-        with open(self.storage_path, 'w') as f:
-            json.dump(state, f)
 
     async def getattr(self, inode, ctx=None):
         path = llfuse.fuse_decode_inode(inode)

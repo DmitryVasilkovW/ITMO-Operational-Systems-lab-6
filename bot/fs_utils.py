@@ -19,7 +19,6 @@ def mount_fs():
         llfuse.main()
     except:
         llfuse.close(unmount=True)
-    memory_fs.save_to_storage()
     logger.info(f"File system successfully unmounted from {MOUNT_POINT}")
 
 
@@ -27,7 +26,6 @@ def unmount_fs():
     global memory_fs
     if check_mount():
         os.system(f"fusermount -u {MOUNT_POINT}")
-        memory_fs.save_to_storage()
         logger.info(f"File system successfully unmounted from {MOUNT_POINT}")
 
 

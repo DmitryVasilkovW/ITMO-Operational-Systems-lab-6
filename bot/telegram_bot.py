@@ -5,7 +5,9 @@ import re
 
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
-from config import logger, MOUNT_POINT, TOKEN
+
+from bot.collect_metadata import save_metadata_to_storage
+from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
 
 fuse_stopped = False
@@ -82,6 +84,7 @@ def save_file(update: Update, context: CallbackContext):
         logger.info(f"File downloaded to: {local_path}")
 
         update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
+        save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         return ConversationHandler.END
     else:
         update.message.reply_text("Пожалуйста, отправьте документ.")
@@ -113,6 +116,7 @@ def mkdir(update: Update, context: CallbackContext):
             user_id = update.message.from_user.id
             logger.info(
                 f"Directory {directory_name} created successfully at {new_dir_path} from chat_id {chat_id} and user_id {user_id}.")
+            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
             logger.error(f"Error creating directory {directory_name}: {e}")
             update.message.reply_text(f"Ошибка при создании директории")
@@ -146,6 +150,7 @@ def move(update, context):
             chat_id = update.message.chat_id
             user_id = update.message.from_user.id
             logger.info(f"{source} перемещен(а) в {destination} от chat_id {chat_id} и user_id {user_id}.")
+            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
             logger.error(f"Ошибка при перемещении {source} в {destination}: {e}")
             update.message.reply_text(f"Ошибка при перемещении")
@@ -153,7 +158,6 @@ def move(update, context):
         update.message.reply_text("Ошибка: неправильный формат команды. Используйте /mv <источник> <назначение>.")
 
     return ConversationHandler.END
-
 
 
 def start_command(update: Update, context: CallbackContext):
@@ -165,6 +169,7 @@ def start_command(update: Update, context: CallbackContext):
     fuse_stopped = False
 
     update.message.reply_text('Готов принимать команды для работы с файловой системой.')
+    save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
     return ConversationHandler.END
 
 
@@ -180,5 +185,5 @@ def stop_command(update: Update, context: CallbackContext):
     fuse_stopped = True
 
     logger.info("Fuse stopped")
-
+    save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
     return ConversationHandler.END
