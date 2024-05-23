@@ -1,4 +1,5 @@
 import os
+import shutil
 import threading
 import re
 
@@ -28,6 +29,8 @@ def handle_private(update, context):
         start_command(update, context)
     elif '/mkdir' in message_text:
         mkdir(update, context)
+    elif '/mv' in message_text:
+        move(update, context)
 
 
 def handle_mention(update, context):
@@ -39,6 +42,8 @@ def handle_mention(update, context):
             stop_command(update, context)
         elif '/mkdir' in message_text:
             mkdir(update, context)
+        elif '/mv' in message_text:
+            move(update, context)
 
 
 def save_file_command(update, context):
@@ -72,7 +77,6 @@ def save_file(update: Update, context: CallbackContext):
                 f"Файл с именем {filename} уже существует. Пожалуйста, отправьте файл с другим именем.")
             return context.user_data['save_context']
 
-
         file = context.bot.get_file(file_id)
         file.download(local_path)
         logger.info(f"File downloaded to: {local_path}")
@@ -103,7 +107,7 @@ def mkdir(update: Update, context: CallbackContext):
         new_dir_path = os.path.join(MOUNT_POINT, directory_name)
 
         try:
-            os.makedirs(new_dir_path, exist_ok=True)
+            os.makedirs(new_dir_path, exist_ok=True, mode=0o777)
             update.message.reply_text(f"Директория {directory_name} успешно создана.")
             chat_id = update.message.chat_id
             user_id = update.message.from_user.id
@@ -111,12 +115,45 @@ def mkdir(update: Update, context: CallbackContext):
                 f"Directory {directory_name} created successfully at {new_dir_path} from chat_id {chat_id} and user_id {user_id}.")
         except Exception as e:
             logger.error(f"Error creating directory {directory_name}: {e}")
-            update.message.reply_text(f"Ошибка при создании директории: {e}")
+            update.message.reply_text(f"Ошибка при создании директории")
     else:
         update.message.reply_text(
             "Ошибка: не удалось извлечь имя директории. Убедитесь, что команда введена правильно.")
 
     return ConversationHandler.END
+
+
+def move(update, context):
+    message_text = update.message.text
+    match = re.search(r'/mv (\S+) (\S+)$', message_text)
+
+    logger.info(message_text)
+    logger.info(match)
+    if match:
+        source = match.group(1)
+        destination = match.group(2)
+        source_path = os.path.join(MOUNT_POINT, source)
+        destination_path = os.path.join(MOUNT_POINT, destination)
+
+        if not os.path.exists(source_path):
+            update.message.reply_text(f"Ошибка: Исходный путь {source} не существует.")
+            return ConversationHandler.END
+
+        try:
+            shutil.move(source_path, destination_path)
+            update.message.reply_text(f"{source} успешно перемещен(а) в {destination}.")
+
+            chat_id = update.message.chat_id
+            user_id = update.message.from_user.id
+            logger.info(f"{source} перемещен(а) в {destination} от chat_id {chat_id} и user_id {user_id}.")
+        except Exception as e:
+            logger.error(f"Ошибка при перемещении {source} в {destination}: {e}")
+            update.message.reply_text(f"Ошибка при перемещении")
+    else:
+        update.message.reply_text("Ошибка: неправильный формат команды. Используйте /mv <источник> <назначение>.")
+
+    return ConversationHandler.END
+
 
 
 def start_command(update: Update, context: CallbackContext):

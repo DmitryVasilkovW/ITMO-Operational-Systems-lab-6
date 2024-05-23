@@ -35,7 +35,7 @@ def main():
     )
 
     conv_handler_save_file_private = ConversationHandler(
-        entry_points=[CommandHandler('save', save_file_command)],
+        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(r'\bsave\b'), save_file_command)],
         states={
             'waiting_for_file_private': [MessageHandler(~Filters.command, save_file)]
         },
