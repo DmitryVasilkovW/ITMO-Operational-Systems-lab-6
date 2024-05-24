@@ -78,47 +78,65 @@ def handle_mention(update, context):
                     update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
 
 
+def cancel(update, context):
+    update.message.reply_text('Операция отменена.')
+    return ConversationHandler.END
+
+
 def save_file_command(update, context):
-    update.message.reply_text('Отправьте файл: ')
+    update.message.reply_text('Отправьте файл или введите /cancel_save_command для отмены.')
+    context.user_data['save_user_id'] = update.message.from_user.id
     context.user_data['save_context'] = 'waiting_for_file_private'
+    context.user_data['attempt_count'] = 0
     return 'waiting_for_file_private'
 
 
 def save_file_mention_command(update, context):
     if check_mention(update, context):
-        update.message.reply_text('Отправьте файл: ')
+        update.message.reply_text('Отправьте файл или введите /cancel_save_command для отмены.')
+        context.user_data['save_user_id'] = update.message.from_user.id
         context.user_data['save_context'] = 'waiting_for_file_mention'
+        context.user_data['attempt_count'] = 0
         return 'waiting_for_file_mention'
 
 
+
 def save_file(update: Update, context: CallbackContext):
-    if update.message.document:
-        document = update.message.document
-        file_id = document.file_id
-        filename = document.file_name
-        chat_id = update.message.chat_id
-        user_id = update.message.from_user.id
-        logger.info(f"Received document from chat_id: {chat_id}")
-        logger.info(f"Received document from user_id: {user_id}")
-        logger.info(f"Document received: file_id={file_id}, filename={filename}")
+    if 'save_user_id' in context.user_data and context.user_data['save_user_id'] == update.message.from_user.id:
+        if update.message.document:
+            document = update.message.document
+            file_id = document.file_id
+            filename = document.file_name
+            chat_id = update.message.chat_id
+            user_id = update.message.from_user.id
+            logger.info(f"Received document from chat_id: {chat_id}")
+            logger.info(f"Received document from user_id: {user_id}")
+            logger.info(f"Document received: file_id={file_id}, filename={filename}")
 
-        local_path = os.path.join(MOUNT_POINT, filename)
+            local_path = os.path.join(MOUNT_POINT, filename)
 
-        if os.path.exists(local_path):
-            update.message.reply_text(
-                f"Файл с именем {filename} уже существует. Пожалуйста, отправьте файл с другим именем.")
-            return context.user_data['save_context']
+            if os.path.exists(local_path):
+                update.message.reply_text(
+                    f"Файл с именем {filename} уже существует. Пожалуйста, отправьте файл с другим именем.")
+                return context.user_data['save_context']
 
-        file = context.bot.get_file(file_id)
-        file.download(local_path)
-        logger.info(f"File downloaded to: {local_path}")
+            file = context.bot.get_file(file_id)
+            file.download(local_path)
+            logger.info(f"File downloaded to: {local_path}")
 
-        update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
-        save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
-        return ConversationHandler.END
+            update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
+            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            return ConversationHandler.END
+        else:
+            context.user_data['attempt_count'] += 1
+            if context.user_data['attempt_count'] >= 3:
+                update.message.reply_text("Превышено количество попыток отправки документа.")
+                return ConversationHandler.END
+            else:
+                update.message.reply_text("Пожалуйста, отправьте документ или введите /cancel_save_command для отмены.")
+                return context.user_data['save_context']
     else:
-        update.message.reply_text("Пожалуйста, отправьте документ.")
-        return ConversationHandler.END
+        return context.user_data['save_context']
 
 
 def mkdir(update: Update, context: CallbackContext):

@@ -4,7 +4,7 @@ import sys
 
 from telegram import Bot, MessageEntity
 from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler, CommandHandler
-from telegram_bot import handle_private, handle_mention, save_file_command, save_file, save_file_mention_command
+from telegram_bot import handle_private, handle_mention, save_file_command, save_file, save_file_mention_command, cancel
 from config import TOKEN
 from fs_utils import start_fuse, unmount_fs
 
@@ -29,7 +29,10 @@ def main():
         entry_points=[MessageHandler(Filters.entity(MessageEntity.MENTION) & Filters.regex(r'\bsave\b'),
                                      save_file_mention_command)],
         states={
-            'waiting_for_file_mention': [MessageHandler(~Filters.command, save_file)]
+            'waiting_for_file_mention': [
+                CommandHandler('cancel_save_command', cancel),
+                MessageHandler(~Filters.command, save_file)
+            ]
         },
         fallbacks=[]
     )
@@ -37,7 +40,10 @@ def main():
     conv_handler_save_file_private = ConversationHandler(
         entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(r'\bsave\b'), save_file_command)],
         states={
-            'waiting_for_file_private': [MessageHandler(~Filters.command, save_file)]
+            'waiting_for_file_private': [
+                CommandHandler('cancel_save_command', cancel),
+                MessageHandler(~Filters.command, save_file)
+            ]
         },
         fallbacks=[]
     )
