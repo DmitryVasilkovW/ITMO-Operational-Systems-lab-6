@@ -27,16 +27,16 @@ def check_mention(update, context) -> bool:
 def handle_private(update, context):
     message_text = update.message.text
 
-    if message_text == '/stop':
+    if message_text.startswith('/stop'):
         stop_command(update, context)
 
-    elif message_text == '/start':
+    elif message_text.startswith('/start'):
         start_command(update, context)
 
-    elif '/mkdir' in message_text:
+    elif message_text.startswith('/mkdir'):
         mkdir(update, context)
 
-    elif '/mv' in message_text:
+    elif message_text.startswith('/mv'):
         move(update, context)
 
     elif message_text.startswith('/convert '):
@@ -53,29 +53,33 @@ def handle_private(update, context):
 def handle_mention(update, context):
     if check_mention(update, context):
         message_text = update.message.text
+        words = message_text.split()
 
-        if '/start' in message_text:
-            start_command(update, context)
+        if len(words) > 1:
+            command = words[1]
 
-        elif '/stop' in message_text:
-            stop_command(update, context)
+            if command == '/start':
+                start_command(update, context)
 
-        elif '/mkdir' in message_text:
-            mkdir(update, context)
+            elif command == '/stop':
+                stop_command(update, context)
 
-        elif '/mv' in message_text:
-            move(update, context)
+            elif command == '/mkdir':
+                mkdir(update, context)
 
-        elif '/convert ' in message_text:
-            match = re.search(r'/convert (\S+)', message_text)
+            elif command == '/mv':
+                move(update, context)
 
-            if match:
-                path = match.group(1)
+            elif command == '/convert':
+                if len(words) > 2:
+                    path = words[2]
 
-                if os.path.exists(path):
-                    convert_command(update, context, path)
+                    if os.path.exists(path):
+                        convert_command(update, context, path)
+                    else:
+                        update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
                 else:
-                    update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
+                    update.message.reply_text('Пожалуйста, укажите путь для команды /convert.')
 
 
 def cancel(update, context):
