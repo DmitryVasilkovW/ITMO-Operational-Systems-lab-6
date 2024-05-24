@@ -100,7 +100,6 @@ def save_file_mention_command(update, context):
         return 'waiting_for_file_mention'
 
 
-
 def save_file(update: Update, context: CallbackContext):
     if 'save_user_id' in context.user_data and context.user_data['save_user_id'] == update.message.from_user.id:
         if update.message.document:
@@ -150,9 +149,9 @@ def mkdir(update: Update, context: CallbackContext):
                 "Ошибка: команда должна содержать только одно слово.")
             return ConversationHandler.END
 
-        if '/' in directory_name:
+        if '/' == directory_name[0]:
             update.message.reply_text(
-                "Ошибка: команда должна содержать только одно слово без символов '/'.")
+                "Ошибка: имя директории не должно начинаться с `/`.")
             return ConversationHandler.END
 
         new_dir_path = os.path.join(MOUNT_POINT, directory_name)
