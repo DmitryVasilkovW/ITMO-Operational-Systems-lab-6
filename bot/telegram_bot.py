@@ -139,15 +139,32 @@ def save_file_mention_command(update, context):
 
 def save_file(update: Update, context: CallbackContext):
     if 'save_user_id' in context.user_data and context.user_data['save_user_id'] == update.message.from_user.id:
+        file_info = None
+        filename = None
+
         if update.message.document:
-            document = update.message.document
-            file_id = document.file_id
-            filename = document.file_name
+            file_info = update.message.document
+            filename = file_info.file_name
+        elif update.message.photo:
+            file_info = update.message.photo[-1]
+            filename = f"photo_{file_info.file_id}.jpg"
+        elif update.message.video:
+            file_info = update.message.video
+            filename = file_info.file_name
+        elif update.message.animation:
+            file_info = update.message.animation
+            filename = file_info.file_name
+        elif update.message.audio:
+            file_info = update.message.audio
+            filename = file_info.file_name
+
+        if file_info:
+            file_id = file_info.file_id
             chat_id = update.message.chat_id
             user_id = update.message.from_user.id
-            logger.info(f"Received document from chat_id: {chat_id}")
-            logger.info(f"Received document from user_id: {user_id}")
-            logger.info(f"Document received: file_id={file_id}, filename={filename}")
+            logger.info(f"Received file from chat_id: {chat_id}")
+            logger.info(f"Received file from user_id: {user_id}")
+            logger.info(f"File received: file_id={file_id}, filename={filename}")
 
             save_dir = context.user_data.get('save_dir', MOUNT_POINT)
             local_path = os.path.join(MOUNT_POINT, save_dir, filename)
@@ -169,7 +186,7 @@ def save_file(update: Update, context: CallbackContext):
         else:
             context.user_data['attempt_count'] += 1
             if context.user_data['attempt_count'] >= 3:
-                update.message.reply_text("Превышено количество попыток отправки документа.")
+                update.message.reply_text("Превышено количество попыток отправки файла.")
                 return ConversationHandler.END
             else:
                 if context.user_data['save_context'] == 'waiting_for_file_mention':
