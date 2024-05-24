@@ -147,18 +147,19 @@ def mkdir(update: Update, context: CallbackContext):
     if match:
         directory_name = match.group(1)
 
-        logger.info(match)
         if re.search(r'/mkdir\s+(\S+)\s+(\S+)', update.message.text) is not None:
-            update.message.reply_text(
-                "Ошибка: команда должна содержать только одно слово.")
+            update.message.reply_text("Ошибка: команда должна содержать только одно слово.")
             return ConversationHandler.END
 
         if '/' == directory_name[0]:
-            update.message.reply_text(
-                "Ошибка: имя директории не должно начинаться с `/`.")
+            update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
             return ConversationHandler.END
 
         new_dir_path = os.path.join(MOUNT_POINT, directory_name)
+
+        if os.path.exists(new_dir_path):
+            update.message.reply_text(f"Ошибка: директория {directory_name} уже существует")
+            return ConversationHandler.END
 
         try:
             os.makedirs(new_dir_path, exist_ok=True, mode=0o777)
@@ -187,6 +188,10 @@ def move(update, context):
         destination = match.group(2)
         source_path = os.path.join(MOUNT_POINT, source)
         destination_path = os.path.join(MOUNT_POINT, destination)
+
+        if source_path == destination_path:
+            update.message.reply_text(f"Ошибка: Исходный путь {source} и путь назначения {destination} равны.")
+            return ConversationHandler.END
 
         if not os.path.exists(source_path):
             update.message.reply_text(f"Ошибка: Исходный путь {source} не существует.")
