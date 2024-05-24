@@ -28,7 +28,7 @@ def main():
 
     conv_handler_save_file_mention = ConversationHandler(
         entry_points=[MessageHandler(
-            Filters.entity(MessageEntity.MENTION) & Filters.regex(fr'^{bot_username}\s+/save$'),
+            Filters.entity(MessageEntity.MENTION) & Filters.regex(fr'^{bot_username}\s+(/save|(/save(?:\s+\S+)+))$'),
             save_file_mention_command)],
         states={
             'waiting_for_file_mention': [
@@ -42,7 +42,8 @@ def main():
     )
 
     conv_handler_save_file_private = ConversationHandler(
-        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(r'^/save$'), save_file_command)],
+        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(fr'^(/save|(/save(?:\s+\S+)+))$'),
+                                     save_file_command)],
         states={
             'waiting_for_file_private': [
                 CommandHandler('cancel_save', cancel),

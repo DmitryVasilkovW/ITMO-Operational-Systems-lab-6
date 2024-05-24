@@ -88,6 +88,22 @@ def cancel(update, context):
 
 
 def save_file_command(update, context):
+    match = re.search(fr'^(/save|/save\s+(\S+))$', update.message.text)
+    if match is None:
+        update.message.reply_text('Неверный формат команды. Используйте /save или /save <directory>')
+        return ConversationHandler.END
+
+    match = re.search(fr'^/save\s+(\S+)$', update.message.text)
+
+    if match is not None:
+        if '/' == match.group(1)[0]:
+            update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
+            return ConversationHandler.END
+
+        context.user_data['save_dir'] = match.group(1)
+    else:
+        context.user_data['save_dir'] = MOUNT_POINT
+
     update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
     context.user_data['save_user_id'] = update.message.from_user.id
     context.user_data['save_context'] = 'waiting_for_file_private'
@@ -97,6 +113,22 @@ def save_file_command(update, context):
 
 def save_file_mention_command(update, context):
     if check_mention(update, context):
+        match = re.search(fr'^{context.user_data['bot_username']}\s+(/save|/save\s+(\S+))$', update.message.text)
+        if match is None:
+            update.message.reply_text('Неверный формат команды. Используйте /save или /save <directory>')
+            return ConversationHandler.END
+
+        match = re.search(fr'^{context.user_data['bot_username']}\s+/save\s+(\S+)$', update.message.text)
+
+        if match is not None:
+            if '/' == match.group(1)[0]:
+                update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
+                return ConversationHandler.END
+
+            context.user_data['save_dir'] = match.group(1)
+        else:
+            context.user_data['save_dir'] = MOUNT_POINT
+
         bot_username = context.user_data['bot_username']
         update.message.reply_text(f'Отправьте файл или введите /cancel_save{bot_username} для отмены.')
         context.user_data['save_user_id'] = update.message.from_user.id
@@ -117,7 +149,10 @@ def save_file(update: Update, context: CallbackContext):
             logger.info(f"Received document from user_id: {user_id}")
             logger.info(f"Document received: file_id={file_id}, filename={filename}")
 
-            local_path = os.path.join(MOUNT_POINT, filename)
+            save_dir = context.user_data.get('save_dir', MOUNT_POINT)
+            local_path = os.path.join(MOUNT_POINT, save_dir, filename)
+
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
             if os.path.exists(local_path):
                 update.message.reply_text(
