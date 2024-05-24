@@ -88,7 +88,7 @@ def cancel(update, context):
 
 
 def save_file_command(update, context):
-    update.message.reply_text('Отправьте файл или введите /cancel_save_command для отмены.')
+    update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
     context.user_data['save_user_id'] = update.message.from_user.id
     context.user_data['save_context'] = 'waiting_for_file_private'
     context.user_data['attempt_count'] = 0
@@ -97,7 +97,8 @@ def save_file_command(update, context):
 
 def save_file_mention_command(update, context):
     if check_mention(update, context):
-        update.message.reply_text('Отправьте файл или введите /cancel_save_command для отмены.')
+        bot_username = context.user_data['bot_username']
+        update.message.reply_text(f'Отправьте файл или введите /cancel_save{bot_username} для отмены.')
         context.user_data['save_user_id'] = update.message.from_user.id
         context.user_data['save_context'] = 'waiting_for_file_mention'
         context.user_data['attempt_count'] = 0
@@ -136,7 +137,11 @@ def save_file(update: Update, context: CallbackContext):
                 update.message.reply_text("Превышено количество попыток отправки документа.")
                 return ConversationHandler.END
             else:
-                update.message.reply_text("Пожалуйста, отправьте документ или введите /cancel_save_command для отмены.")
+                if context.user_data['save_context'] == 'waiting_for_file_mention':
+                    bot_username = context.user_data['bot_username']
+                    update.message.reply_text(f'Отправьте файл или введите /cancel_save{bot_username} для отмены.')
+                else:
+                    update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
                 return context.user_data['save_context']
     else:
         return context.user_data['save_context']

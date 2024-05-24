@@ -24,13 +24,17 @@ def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
     dp.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
+    bot_username = dp.user_data['bot_username']
 
     conv_handler_save_file_mention = ConversationHandler(
-        entry_points=[MessageHandler(Filters.entity(MessageEntity.MENTION) & Filters.regex(r'\bsave\b'),
-                                     save_file_mention_command)],
+        entry_points=[MessageHandler(
+            Filters.entity(MessageEntity.MENTION) & Filters.regex(fr'^{bot_username} /save$'),
+            save_file_mention_command)],
         states={
             'waiting_for_file_mention': [
-                CommandHandler('cancel_save_command', cancel),
+                MessageHandler(Filters.regex(
+                    fr'^({bot_username}\s+/cancel_save|/cancel_save{bot_username}|/cancel_save\s+{bot_username})$'),
+                    cancel),
                 MessageHandler(~Filters.command, save_file)
             ]
         },
@@ -38,10 +42,10 @@ def main():
     )
 
     conv_handler_save_file_private = ConversationHandler(
-        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(r'\bsave\b'), save_file_command)],
+        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(r'^/save$'), save_file_command)],
         states={
             'waiting_for_file_private': [
-                CommandHandler('cancel_save_command', cancel),
+                CommandHandler('cancel_save', cancel),
                 MessageHandler(~Filters.command, save_file)
             ]
         },
