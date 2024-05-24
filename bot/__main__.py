@@ -28,7 +28,7 @@ def main():
 
     conv_handler_save_file_mention = ConversationHandler(
         entry_points=[MessageHandler(
-            Filters.entity(MessageEntity.MENTION) & Filters.regex(fr'^{bot_username} /save$'),
+            Filters.entity(MessageEntity.MENTION) & Filters.regex(fr'^{bot_username}\s+/save$'),
             save_file_mention_command)],
         states={
             'waiting_for_file_mention': [
