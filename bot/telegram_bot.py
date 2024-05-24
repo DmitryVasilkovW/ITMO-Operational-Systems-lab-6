@@ -147,7 +147,7 @@ def save_file(update: Update, context: CallbackContext):
             filename = file_info.file_name
         elif update.message.photo:
             file_info = update.message.photo[-1]
-            filename = f"photo_{file_info.file_id}.jpg"
+            filename = f"photo_{file_info.file_unique_id}.jpg"
         elif update.message.video:
             file_info = update.message.video
             filename = file_info.file_name
