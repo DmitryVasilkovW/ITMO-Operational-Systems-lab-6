@@ -14,6 +14,15 @@ from fs_utils import unmount_fs, start_fuse
 fuse_stopped = False
 
 
+def split_and_send_message(update: Update, text):
+    max_message_length = 4096
+
+    parts = [text[i:i + max_message_length] for i in range(0, len(text), max_message_length)]
+
+    for part in parts:
+        update.message.reply_text(part)
+
+
 def check_mention(update, context) -> bool:
     if 'bot_username' not in context.user_data:
         context.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
@@ -281,8 +290,7 @@ def move(update, context):
     return ConversationHandler.END
 
 
-def list_files(update, context):
-    directory_path = '/'
+def build_file_list() -> list[str]:
     files_list = []
 
     for root, dirs, files in os.walk(MOUNT_POINT):
@@ -295,6 +303,12 @@ def list_files(update, context):
                 relative_path = f"/{relative_path}"
 
             files_list.append(f"<{relative_path}> {file}")
+    return files_list
+
+
+def list_files(update, context):
+    directory_path = '/'
+    files_list = build_file_list()
 
     if files_list:
         files_output = "\n".join(files_list)
@@ -302,7 +316,7 @@ def list_files(update, context):
     else:
         message = f"Директория {directory_path} и все поддиректории пусты."
 
-    update.message.reply_text(message)
+    split_and_send_message(update, message)
     return ConversationHandler.END
 
 
