@@ -5,7 +5,7 @@ import sys
 from telegram import Bot, MessageEntity
 from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler, CommandHandler
 from telegram_bot import handle_private, handle_mention, save_file_command, save_file, save_file_mention_command, \
-    cancel, build_file_list
+    cancel, file_list
 from config import TOKEN
 from fs_utils import start_fuse, unmount_fs
 
@@ -26,7 +26,7 @@ def main():
     dp = updater.dispatcher
     dp.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
     bot_username = dp.user_data['bot_username']
-    build_file_list()
+    file_list()
 
     conv_handler_save_file_mention = ConversationHandler(
         entry_points=[MessageHandler(

@@ -290,7 +290,7 @@ def move(update, context):
     return ConversationHandler.END
 
 
-def build_file_list() -> list[str]:
+def file_list() -> list[str]:
     files_list = []
 
     for root, dirs, files in os.walk(MOUNT_POINT):
@@ -308,13 +308,36 @@ def build_file_list() -> list[str]:
 
 def list_files(update, context):
     directory_path = '/'
-    files_list = build_file_list()
+    match = re.search(r'/ls\s+(\S+)', update.message.text)
+
+    if match:
+        directory_path = match.group(1)
+
+        logger.info(directory_path)
+
+        if re.search(r'/ls\s+(\S+)\s+(\S+)', update.message.text) is not None:
+            update.message.reply_text("Ошибка: используйте /ls или /ls <dir>.")
+            return ConversationHandler.END
+
+        if '/' != directory_path[0]:
+            update.message.reply_text("Ошибка: имя директории должно начинаться с `/`.")
+            return ConversationHandler.END
+
+        check_dir_path = os.path.join(MOUNT_POINT, directory_path[1:])
+
+        if not os.path.exists(check_dir_path):
+            update.message.reply_text(f"Ошибка: директории {directory_path} не существует")
+            return ConversationHandler.END
+
+    files_list = file_list()
+
+    filtered_files = [file for file in files_list if file.startswith(f"<{directory_path}")]
 
     if files_list:
-        files_output = "\n".join(files_list)
+        files_output = "\n".join(filtered_files)
         message = files_output
     else:
-        message = f"Директория {directory_path} и все поддиректории пусты."
+        message = f"Директория {filtered_files} и все поддиректории пусты."
 
     split_and_send_message(update, message)
     return ConversationHandler.END
