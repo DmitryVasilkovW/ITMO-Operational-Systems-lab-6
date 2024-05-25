@@ -6,7 +6,7 @@ import re
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
-from bot.converter import convert_png_to_jpg, create_empty_jpg
+from bot.converter import create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage
 from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
