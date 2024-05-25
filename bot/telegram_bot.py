@@ -6,7 +6,7 @@ import re
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
-from bot.converter import convert_png_to_jpg, create_empty_jpg
+from bot.converter import create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage
 from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
@@ -312,8 +312,6 @@ def list_files(update, context):
 
     if match:
         directory_path = match.group(1)
-
-        logger.info(directory_path)
 
         if re.search(r'/ls\s+(\S+)\s+(\S+)', update.message.text) is not None:
             update.message.reply_text("Ошибка: используйте /ls или /ls <dir>.")
