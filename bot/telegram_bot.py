@@ -48,7 +48,7 @@ def handle_private(update, context):
     elif message_text.startswith('/ls'):
         list_files(update, context)
 
-    elif message_text.startswith('/treels'):
+    elif message_text.startswith('/trls'):
         tree_list_files(update, context)
 
     elif message_text.startswith('/convert '):
@@ -85,7 +85,7 @@ def handle_mention(update, context):
             elif command == '/ls':
                 list_files(update, context)
 
-            elif command == '/treels':
+            elif command == '/trls':
                 tree_list_files(update, context)
 
             elif command == '/convert':
@@ -328,6 +328,17 @@ def tree(directory: str, prefix: str = '') -> str:
             result.append(f"{prefix}{pointer}{path}")
     return '\n'.join(result)
 
+def list_path_check(update, directory_path):
+    if '/' != directory_path[0]:
+        update.message.reply_text("Ошибка: имя директории должно начинаться с `/`.")
+        return ConversationHandler.END
+
+    check_dir_path = os.path.join(MOUNT_POINT, directory_path[1:])
+
+    if not os.path.exists(check_dir_path):
+        update.message.reply_text(f"Ошибка: директории {directory_path} не существует")
+        return ConversationHandler.END
+
 
 def list_files(update, context):
     directory_path = '/'
@@ -340,22 +351,14 @@ def list_files(update, context):
             update.message.reply_text("Ошибка: используйте /ls или /ls <dir>.")
             return ConversationHandler.END
 
-        if '/' != directory_path[0]:
-            update.message.reply_text("Ошибка: имя директории должно начинаться с `/`.")
-            return ConversationHandler.END
-
-        check_dir_path = os.path.join(MOUNT_POINT, directory_path[1:])
-
-        if not os.path.exists(check_dir_path):
-            update.message.reply_text(f"Ошибка: директории {directory_path} не существует")
-            return ConversationHandler.END
+        list_path_check(update, directory_path)
 
     files_list = file_list()
 
     filtered_files = [file for file in files_list if file.startswith(f"<{directory_path}")]
 
     if files_list:
-        files_output = "\n".join(filtered_files)
+        files_output = f"```\n{'\n'.join(filtered_files)}```"
         message = files_output
     else:
         message = f"Директория {filtered_files} и все поддиректории пусты."
@@ -366,31 +369,24 @@ def list_files(update, context):
 
 def tree_list_files(update, context):
     directory_path = '/'
-    match = re.search(r'/ls\s+(\S+)', update.message.text)
+    match = re.search(r'/trls\s+(\S+)', update.message.text)
 
     if match:
         directory_path = match.group(1)
 
-        if re.search(r'/ls\s+(\S+)\s+(\S+)', update.message.text) is not None:
-            update.message.reply_text("Ошибка: используйте /treels или /treels <dir>.")
+        if re.search(r'/trls\s+(\S+)\s+(\S+)', update.message.text) is not None:
+            update.message.reply_text("Ошибка: используйте /trls или /trls <dir>.")
             return ConversationHandler.END
 
-        if not directory_path.startswith('/'):
-            update.message.reply_text("Ошибка: имя директории должно начинаться с `/`.")
-            return ConversationHandler.END
-
-        check_dir_path = os.path.join(MOUNT_POINT, directory_path[1:])
-
-        if not os.path.exists(check_dir_path):
-            update.message.reply_text(f"Ошибка: директории {directory_path} не существует")
-            return ConversationHandler.END
+        list_path_check(update, directory_path)
 
     files_list = file_list()
     filtered_files = [file for file in files_list if file.startswith(f"<{directory_path}")]
 
     if filtered_files:
         tree_output = tree(os.path.join(MOUNT_POINT, directory_path.strip('/')))
-        message = f"```\n{tree_output}\n```"
+        tree_lines = [line for line in tree_output.split('\n') if line.strip()]
+        message = f"```\n{'\n'.join(tree_lines)}\n```"
     else:
         message = f"Директория {directory_path} и все поддиректории пусты."
 
