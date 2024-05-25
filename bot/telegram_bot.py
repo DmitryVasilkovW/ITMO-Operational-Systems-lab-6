@@ -14,13 +14,10 @@ from fs_utils import unmount_fs, start_fuse
 fuse_stopped = False
 
 
-def split_and_send_message(update: Update, text):
+def split_and_send_message(update: Update, message: str):
     max_message_length = 4096
-
-    parts = [text[i:i + max_message_length] for i in range(0, len(text), max_message_length)]
-
-    for part in parts:
-        update.message.reply_text(part)
+    for i in range(0, len(message), max_message_length):
+        update.message.reply_text(message[i:i + max_message_length], parse_mode='Markdown')
 
 
 def check_mention(update, context) -> bool:
@@ -50,6 +47,9 @@ def handle_private(update, context):
 
     elif message_text.startswith('/ls'):
         list_files(update, context)
+
+    elif message_text.startswith('/treels'):
+        tree_list_files(update, context)
 
     elif message_text.startswith('/convert '):
         match = re.search(r'/convert (\S+)', message_text)
@@ -84,6 +84,9 @@ def handle_mention(update, context):
 
             elif command == '/ls':
                 list_files(update, context)
+
+            elif command == '/treels':
+                tree_list_files(update, context)
 
             elif command == '/convert':
                 if len(words) > 2:
@@ -306,6 +309,26 @@ def file_list() -> list[str]:
     return files_list
 
 
+def tree(directory: str, prefix: str = '') -> str:
+    result = []
+    contents = os.listdir(directory)
+    contents = sorted(contents, key=lambda s: s.lower())
+    pointers = ['├── '] * (len(contents) - 1) + ['└── ']
+
+    for pointer, path in zip(pointers, contents):
+        full_path = os.path.join(directory, path)
+        if os.path.isdir(full_path):
+            result.append(f"{prefix}{pointer}{path}/")
+            if pointer == '└── ':
+                extension = '    '
+            else:
+                extension = '│   '
+            result.append(tree(full_path, prefix=prefix + extension))
+        else:
+            result.append(f"{prefix}{pointer}{path}")
+    return '\n'.join(result)
+
+
 def list_files(update, context):
     directory_path = '/'
     match = re.search(r'/ls\s+(\S+)', update.message.text)
@@ -336,6 +359,40 @@ def list_files(update, context):
         message = files_output
     else:
         message = f"Директория {filtered_files} и все поддиректории пусты."
+
+    split_and_send_message(update, message)
+    return ConversationHandler.END
+
+
+def tree_list_files(update, context):
+    directory_path = '/'
+    match = re.search(r'/ls\s+(\S+)', update.message.text)
+
+    if match:
+        directory_path = match.group(1)
+
+        if re.search(r'/ls\s+(\S+)\s+(\S+)', update.message.text) is not None:
+            update.message.reply_text("Ошибка: используйте /treels или /treels <dir>.")
+            return ConversationHandler.END
+
+        if not directory_path.startswith('/'):
+            update.message.reply_text("Ошибка: имя директории должно начинаться с `/`.")
+            return ConversationHandler.END
+
+        check_dir_path = os.path.join(MOUNT_POINT, directory_path[1:])
+
+        if not os.path.exists(check_dir_path):
+            update.message.reply_text(f"Ошибка: директории {directory_path} не существует")
+            return ConversationHandler.END
+
+    files_list = file_list()
+    filtered_files = [file for file in files_list if file.startswith(f"<{directory_path}")]
+
+    if filtered_files:
+        tree_output = tree(os.path.join(MOUNT_POINT, directory_path.strip('/')))
+        message = f"```\n{tree_output}\n```"
+    else:
+        message = f"Директория {directory_path} и все поддиректории пусты."
 
     split_and_send_message(update, message)
     return ConversationHandler.END
