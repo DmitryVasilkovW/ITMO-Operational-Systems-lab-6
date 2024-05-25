@@ -19,7 +19,6 @@ def mount_fs():
         llfuse.main()
     except:
         llfuse.close(unmount=True)
-    logger.info(f"File system successfully unmounted from {MOUNT_POINT}")
 
 
 def unmount_fs():

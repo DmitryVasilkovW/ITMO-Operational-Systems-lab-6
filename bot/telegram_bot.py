@@ -39,6 +39,9 @@ def handle_private(update, context):
     elif message_text.startswith('/mv'):
         move(update, context)
 
+    elif message_text.startswith('/ls'):
+        list_files(update, context)
+
     elif message_text.startswith('/convert '):
         match = re.search(r'/convert (\S+)', message_text)
 
@@ -69,6 +72,9 @@ def handle_mention(update, context):
 
             elif command == '/mv':
                 move(update, context)
+
+            elif command == '/ls':
+                list_files(update, context)
 
             elif command == '/convert':
                 if len(words) > 2:
@@ -272,6 +278,31 @@ def move(update, context):
     else:
         update.message.reply_text("Ошибка: неправильный формат команды. Используйте /mv <источник> <назначение>.")
 
+    return ConversationHandler.END
+
+
+def list_files(update, context):
+    directory_path = '/'
+    files_list = []
+
+    for root, dirs, files in os.walk(MOUNT_POINT):
+        for file in files:
+            relative_path = os.path.relpath(root, MOUNT_POINT)
+
+            if relative_path == '.':
+                relative_path = '/'
+            else:
+                relative_path = f"/{relative_path}"
+
+            files_list.append(f"<{relative_path}> {file}")
+
+    if files_list:
+        files_output = "\n".join(files_list)
+        message = files_output
+    else:
+        message = f"Директория {directory_path} и все поддиректории пусты."
+
+    update.message.reply_text(message)
     return ConversationHandler.END
 
 
