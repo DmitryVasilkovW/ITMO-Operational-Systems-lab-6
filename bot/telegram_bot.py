@@ -4,7 +4,7 @@ import threading
 import re
 
 from telegram import Update, MessageEntity, Bot
-from telegram.ext import CallbackContext, ConversationHandler
+from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, Filters
 
 from bot.converter import convert_png_to_jpg, create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage
@@ -40,14 +40,7 @@ def handle_private(update, context):
         move(update, context)
 
     elif message_text.startswith('/convert '):
-        match = re.search(r'/convert (\S+)', message_text)
-
-        if match:
-            path = match.group(1)
-            if os.path.exists(path):
-                convert_command(update, context, path)
-            else:
-                update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
+        convert_command(update, context)
 
 
 def handle_mention(update, context):
@@ -67,15 +60,7 @@ def handle_mention(update, context):
             move(update, context)
 
         elif '/convert ' in message_text:
-            match = re.search(r'/convert (\S+)', message_text)
-
-            if match:
-                path = match.group(1)
-
-                if os.path.exists(path):
-                    convert_command(update, context, path)
-                else:
-                    update.message.reply_text('Путь не существует. Пожалуйста, введите действительный путь.')
+            convert_command(update, context)
 
 
 def save_file_command(update, context):
@@ -221,31 +206,121 @@ def stop_command(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
-def convert_command(update: Update, context: CallbackContext, path):
-    try:
-        converted_files = []
+def convert_command(update: Update, context: CallbackContext):
+    message_text = update.message.text
+    match = re.search(r'/convert\s+(\S+)$', message_text)
 
-        for filename in os.listdir(path):
-            if filename.endswith(".png"):
-                png_path = os.path.join(path, filename)
-                output_path_jpg = os.path.join(MOUNT_POINT, filename[:-3] + 'jpg')
-                output_path_png = os.path.join(MOUNT_POINT, filename)
-                create_empty_jpg(output_path_jpg)
-                shutil.copy(png_path, output_path_png)
-                converted_files.append(f"{filename} -> {filename[:-3]}jpg")
+    if match:
+        path = match.group(1)
+        if not os.path.exists(path):
+            update.message.reply_text(f"Ошибка: Путь {path} не существует.")
+            return ConversationHandler.END
 
-        converted_files_message = "\n".join(converted_files)
+        try:
+            converted_files = []
+            moved_files = []
+            existing_files = []
+            conflicting_files = []
 
-        update.message.reply_text(f"Файлы в директории {path} успешно обработаны:\n{converted_files_message}")
-        chat_id = update.message.chat_id
-        user_id = update.message.from_user.id
+            for filename in os.listdir(path):
+                source_path = os.path.join(path, filename)
 
-        save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+                if filename.endswith(".png"):
+                    output_filename_jpg = filename[:-4] + '.jpg'
+                    output_path_jpg = os.path.join(MOUNT_POINT, output_filename_jpg)
+                    output_path_png = os.path.join(MOUNT_POINT, filename)
 
-        logger.info(
-            f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
-    except Exception as e:
-        logger.error(f"Error processing files in directory {path}: {e}")
-        update.message.reply_text(f"Ошибка при обработке файлов в директории: {e}")
+                    if os.path.exists(output_path_jpg) and os.path.exists(output_path_png):
+                        existing_files.append(f"{filename} - PNG и JPG файлы уже существуют")
+                    elif os.path.exists(output_path_jpg):
+                        conflicting_files.append((filename, output_filename_jpg, "JPG файл уже существует"))
+                    elif os.path.exists(output_path_png):
+                        conflicting_files.append((filename, filename, "PNG файл уже существует"))
+                    else:
+                        create_empty_jpg(output_path_jpg)
+                        shutil.copy(source_path, output_path_png)
+                        converted_files.append(f"{filename} -> {output_filename_jpg}")
+                elif filename.endswith(".jpg"):
+                    output_filename_png = filename[:-4] + '.png'
+                    output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
+                    output_path_jpg = os.path.join(MOUNT_POINT, filename)
+
+                    if os.path.exists(output_path_png) and os.path.exists(output_path_jpg):
+                        existing_files.append(f"{filename} - JPG и PNG файлы уже существуют")
+                    elif os.path.exists(output_path_png):
+                        conflicting_files.append((filename, output_filename_png, "PNG файл уже существует"))
+                    elif os.path.exists(output_path_jpg):
+                        conflicting_files.append((filename, filename, "JPG файл уже существует"))
+                    else:
+                        shutil.copy(source_path, output_path_jpg)
+                        converted_files.append(f"{filename} -> {output_filename_png}")
+                else:
+                    output_path = os.path.join(MOUNT_POINT, filename)
+                    shutil.copy(source_path, output_path)
+                    moved_files.append(filename)
+
+            response_message = f"Файлы в директории {path} успешно обработаны:\n\n"
+
+            if converted_files:
+                response_message += "Конвертированные файлы:\n" + "\n".join(converted_files) + "\n\n"
+
+            if existing_files:
+                response_message += "Файлы, которые уже существуют:\n" + "\n".join(existing_files) + "\n\n"
+
+            if moved_files:
+                response_message += "Перемещенные файлы:\n" + "\n".join(moved_files) + "\n\n"
+
+            if conflicting_files:
+                response_message += "Конфликтующие файлы:\n"
+                for filename, conflicting_filename, message in conflicting_files:
+                    response_message += f"  - {filename} -> {conflicting_filename} ({message})\n"
+                response_message += "\nХотите перезаписать файлы? (да/нет)"
+
+                conflicting_files_filtered = conflicting_files
+
+                def handle_overwrite_response(update, context):
+                    if update.message.text.lower() in ["да", "ок", "конечно", "хорошо", "+"]:
+                        overwritten_files = []
+                        for filename, conflicting_filename, message in conflicting_files_filtered:
+                            source_path = os.path.join(path, filename)
+                            destination_path = os.path.join(MOUNT_POINT, conflicting_filename)
+                            shutil.copy(source_path, destination_path)
+                            overwritten_files.append(f"{filename} -> {conflicting_filename}")
+                            # Создаем пару PNG и JPG
+                            if filename.endswith(".png"):
+                                output_filename_jpg = filename[:-4] + '.jpg'
+                                output_path_jpg = os.path.join(MOUNT_POINT, output_filename_jpg)
+                                create_empty_jpg(output_path_jpg)
+                                shutil.copy(source_path, output_path_jpg)
+                            elif filename.endswith(".jpg"):
+                                output_filename_png = filename[:-4] + '.png'
+                                output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
+                                shutil.copy(source_path, output_path_png)
+
+                        overwrite_response_message = "Перезаписанные файлы:\n" + "\n".join(overwritten_files)
+                        update.message.reply_text(overwrite_response_message)
+                    elif update.message.text.lower() in ["нет", "не", "неа", "-"]:
+                        update.message.reply_text("Файлы не были перезаписаны.")
+
+                    return ConversationHandler.END
+
+                update.message.reply_text(response_message)
+
+                context.dispatcher.add_handler(
+                    MessageHandler(Filters.text & ~Filters.command, handle_overwrite_response))
+                return
+
+            update.message.reply_text(response_message)
+
+            chat_id = update.message.chat_id
+            user_id = update.message.from_user.id
+            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+
+            logger.info(f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
+        except Exception as e:
+            logger.error(f"Error processing files in directory {path}: {e}")
+            update.message.reply_text(f"Ошибка при копировании файлов из директории {path}")
+    else:
+        update.message.reply_text("Ошибка: неправильный формат команды. Используйте /convert <путь>.")
 
     return ConversationHandler.END
