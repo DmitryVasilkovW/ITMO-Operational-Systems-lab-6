@@ -212,6 +212,7 @@ def convert_command(update: Update, context: CallbackContext):
 
     if match:
         path = match.group(1)
+
         if not os.path.exists(path):
             update.message.reply_text(f"Ошибка: Путь {path} не существует.")
             return ConversationHandler.END
@@ -240,6 +241,7 @@ def convert_command(update: Update, context: CallbackContext):
                         create_empty_jpg(output_path_jpg)
                         shutil.copy(source_path, output_path_png)
                         converted_files.append(f"{filename} -> {output_filename_jpg}")
+
                 elif filename.endswith(".jpg"):
                     output_filename_png = filename[:-4] + '.png'
                     output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
@@ -254,6 +256,7 @@ def convert_command(update: Update, context: CallbackContext):
                     else:
                         shutil.copy(source_path, output_path_jpg)
                         converted_files.append(f"{filename} -> {output_filename_png}")
+
                 else:
                     output_path = os.path.join(MOUNT_POINT, filename)
                     shutil.copy(source_path, output_path)
@@ -272,6 +275,7 @@ def convert_command(update: Update, context: CallbackContext):
 
             if conflicting_files:
                 response_message += "Конфликтующие файлы:\n"
+
                 for filename, conflicting_filename, message in conflicting_files:
                     response_message += f"  - {filename} -> {conflicting_filename} ({message})\n"
                 response_message += "\nХотите перезаписать файлы? (да/нет)"
@@ -281,31 +285,35 @@ def convert_command(update: Update, context: CallbackContext):
                 def handle_overwrite_response(update, context):
                     if update.message.text.lower() in ["да", "ок", "конечно", "хорошо", "+"]:
                         overwritten_files = []
+                        
                         for filename, conflicting_filename, message in conflicting_files_filtered:
                             source_path = os.path.join(path, filename)
                             destination_path = os.path.join(MOUNT_POINT, conflicting_filename)
-                            shutil.copy(source_path, destination_path)
-                            overwritten_files.append(f"{filename} -> {conflicting_filename}")
-                            # Создаем пару PNG и JPG
+
+                            if os.path.exists(destination_path):
+                                os.remove(destination_path)
+
                             if filename.endswith(".png"):
                                 output_filename_jpg = filename[:-4] + '.jpg'
                                 output_path_jpg = os.path.join(MOUNT_POINT, output_filename_jpg)
                                 create_empty_jpg(output_path_jpg)
                                 shutil.copy(source_path, output_path_jpg)
+                                overwritten_files.append(f"{filename} -> {output_filename_jpg}")
                             elif filename.endswith(".jpg"):
                                 output_filename_png = filename[:-4] + '.png'
                                 output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
                                 shutil.copy(source_path, output_path_png)
+                                overwritten_files.append(f"{filename} -> {output_filename_png}")
 
                         overwrite_response_message = "Перезаписанные файлы:\n" + "\n".join(overwritten_files)
                         update.message.reply_text(overwrite_response_message)
+
                     elif update.message.text.lower() in ["нет", "не", "неа", "-"]:
                         update.message.reply_text("Файлы не были перезаписаны.")
 
                     return ConversationHandler.END
 
                 update.message.reply_text(response_message)
-
                 context.dispatcher.add_handler(
                     MessageHandler(Filters.text & ~Filters.command, handle_overwrite_response))
                 return
@@ -316,7 +324,8 @@ def convert_command(update: Update, context: CallbackContext):
             user_id = update.message.from_user.id
             save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
 
-            logger.info(f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
+            logger.info(
+                f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
         except Exception as e:
             logger.error(f"Error processing files in directory {path}: {e}")
             update.message.reply_text(f"Ошибка при копировании файлов из директории {path}")
