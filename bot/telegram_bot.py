@@ -51,6 +51,9 @@ def handle_private(update, context):
     elif message_text.startswith('/trls'):
         tree_list_files(update, context)
 
+    elif message_text.startswith('/rm'):
+        remove(update, context)
+
     elif message_text.startswith('/convert '):
         match = re.search(r'/convert (\S+)', message_text)
 
@@ -87,6 +90,9 @@ def handle_mention(update, context):
 
             elif command == '/trls':
                 tree_list_files(update, context)
+
+            elif command == '/rm':
+                remove(update, context)
 
             elif command == '/convert':
                 if len(words) > 2:
@@ -328,6 +334,7 @@ def tree(directory: str, prefix: str = '') -> str:
             result.append(f"{prefix}{pointer}{path}")
     return '\n'.join(result)
 
+
 def list_path_check(update, directory_path):
     if '/' != directory_path[0]:
         update.message.reply_text("Ошибка: имя директории должно начинаться с `/`.")
@@ -391,6 +398,63 @@ def tree_list_files(update, context):
         message = f"Директория {directory_path} и все поддиректории пусты."
 
     split_and_send_message(update, message)
+    return ConversationHandler.END
+
+
+def remove_file(update, context, target_path):
+    if target_path.startswith('/'):
+        update.message.reply_text("Ошибка: путь не должен начинаться с `/`.")
+        return ConversationHandler.END
+
+    full_path = os.path.join(MOUNT_POINT, target_path)
+
+    if not os.path.exists(full_path):
+        update.message.reply_text(f"Ошибка: путь {target_path} не существует.")
+        return ConversationHandler.END
+
+    try:
+        if os.path.isdir(full_path):
+            logger.info("in dir")
+            shutil.rmtree(full_path)
+        else:
+            logger.info("in file")
+            os.remove(full_path)
+        update.message.reply_text(f"{target_path} успешно удален(а).")
+        chat_id = update.message.chat_id
+        user_id = update.message.from_user.id
+        logger.info(f"{target_path} удален(а) от chat_id {chat_id} и user_id {user_id}.")
+        save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+    except Exception as e:
+        logger.error(f"Ошибка при удалении {target_path}: {e}")
+        update.message.reply_text(f"Ошибка при удалении {target_path}.")
+
+
+def remove(update, context):
+    match = re.search(r'/rm\s+"([^"]+)"', update.message.text)
+    if match:
+        target_path = match.group(1)
+
+        if re.search(r'/rm\s+"([^"]+)"\s+"([^"]+)"', update.message.text) is not None:
+            update.message.reply_text("Ошибка: команда должна содержать только один аргумент.")
+            return ConversationHandler.END
+
+        remove_file(update, context, target_path)
+
+    elif re.search(r'/rm\s+(\S+)', update.message.text):
+        match = re.search(r'/rm\s+(\S+)', update.message.text)
+
+        target_path = match.group(1)
+
+        if re.search(r'/rm\s+(\S+)\s+(\S+)', update.message.text) is not None:
+            update.message.reply_text("Ошибка: команда должна содержать только один аргумент.")
+            return ConversationHandler.END
+
+        remove_file(update, context, target_path)
+
+    else:
+        update.message.reply_text(
+            "Ошибка: не удалось извлечь путь. Убедитесь, что команда введена правильно и путь заключен в кавычки.")
+
     return ConversationHandler.END
 
 
