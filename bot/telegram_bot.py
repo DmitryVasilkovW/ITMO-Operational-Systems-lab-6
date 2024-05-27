@@ -280,13 +280,31 @@ def convert_command(update: Update, context: CallbackContext):
                     response_message += f"  - {filename} -> {conflicting_filename} ({message})\n"
                 response_message += "\nХотите перезаписать файлы? (да/нет)"
 
-                conflicting_files_filtered = conflicting_files
+                conflicting_files_filtered = conflicting_files.copy()
+                overwrite_confirmation = []
 
                 def handle_overwrite_response(update, context):
-                    if update.message.text.lower() in ["да", "ок", "конечно", "хорошо", "+"]:
-                        overwritten_files = []
+                    response = update.message.text.lower()
+                    if response in ["да", "ок", "конечно", "хорошо", "+"]:
+                        overwrite_confirmation.append(True)
+                    elif response in ["нет", "не", "неа", "-"]:
+                        overwrite_confirmation.append(False)
+                    else:
+                        update.message.reply_text("Пожалуйста, ответьте 'да' или 'нет'.")
+                        return
 
-                        for filename, conflicting_filename, message in conflicting_files_filtered:
+                    if len(overwrite_confirmation) < len(conflicting_files_filtered):
+                        next_file = conflicting_files_filtered[len(overwrite_confirmation)]
+                        update.message.reply_text(
+                            f"Хотите перезаписать файл {next_file[0]} -> {next_file[1]}? (да/нет)")
+                    else:
+                        process_overwrites(update, context)
+
+                def process_overwrites(update, context):
+                    overwritten_files = []
+
+                    for i, (filename, conflicting_filename, message) in enumerate(conflicting_files_filtered):
+                        if overwrite_confirmation[i]:
                             source_path = os.path.join(path, filename)
                             destination_path = os.path.join(MOUNT_POINT, conflicting_filename)
 
@@ -309,18 +327,19 @@ def convert_command(update: Update, context: CallbackContext):
                                 shutil.copy(source_path, output_path_png)
                                 create_empty_jpg(output_path_png)
 
+                    overwrite_response_message = "Перезаписанные файлы:\n" + "\n".join(overwritten_files)
+                    update.message.reply_text(overwrite_response_message)
 
-                        overwrite_response_message = "Перезаписанные файлы:\n" + "\n".join(overwritten_files)
-                        update.message.reply_text(overwrite_response_message)
-
-                    elif update.message.text.lower() in ["нет", "не", "неа", "-"]:
-                        update.message.reply_text("Файлы не были перезаписаны.")
+                    context.dispatcher.remove_handler(handle_overwrite_response)
 
                     return ConversationHandler.END
 
                 update.message.reply_text(response_message)
+                next_file = conflicting_files_filtered[0]
+                update.message.reply_text(f"Хотите перезаписать файл {next_file[0]} -> {next_file[1]}? (да/нет)")
                 context.dispatcher.add_handler(
                     MessageHandler(Filters.text & ~Filters.command, handle_overwrite_response))
+
                 return
 
             update.message.reply_text(response_message)
