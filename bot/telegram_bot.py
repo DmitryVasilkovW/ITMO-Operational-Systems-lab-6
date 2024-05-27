@@ -285,7 +285,7 @@ def convert_command(update: Update, context: CallbackContext):
                 def handle_overwrite_response(update, context):
                     if update.message.text.lower() in ["да", "ок", "конечно", "хорошо", "+"]:
                         overwritten_files = []
-                        
+
                         for filename, conflicting_filename, message in conflicting_files_filtered:
                             source_path = os.path.join(path, filename)
                             destination_path = os.path.join(MOUNT_POINT, conflicting_filename)
@@ -295,15 +295,20 @@ def convert_command(update: Update, context: CallbackContext):
 
                             if filename.endswith(".png"):
                                 output_filename_jpg = filename[:-4] + '.jpg'
-                                output_path_jpg = os.path.join(MOUNT_POINT, output_filename_jpg)
-                                create_empty_jpg(output_path_jpg)
-                                shutil.copy(source_path, output_path_jpg)
                                 overwritten_files.append(f"{filename} -> {output_filename_jpg}")
+                                output_path_png = os.path.join(MOUNT_POINT, filename)
+
+                                shutil.copy(source_path, output_path_png)
+                                create_empty_jpg(output_path_png)
+
                             elif filename.endswith(".jpg"):
                                 output_filename_png = filename[:-4] + '.png'
                                 output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
-                                shutil.copy(source_path, output_path_png)
                                 overwritten_files.append(f"{filename} -> {output_filename_png}")
+
+                                shutil.copy(source_path, output_path_png)
+                                create_empty_jpg(output_path_png)
+
 
                         overwrite_response_message = "Перезаписанные файлы:\n" + "\n".join(overwritten_files)
                         update.message.reply_text(overwrite_response_message)
