@@ -329,7 +329,6 @@ def convert_command(update: Update, context: CallbackContext):
 
                 for filename, conflicting_filename, message in conflicting_files:
                     response_message += f"  - {filename} -> {conflicting_filename} ({message})\n"
-                response_message += "\nХотите перезаписать файлы? (да/нет)"
 
                 context.user_data['conflicting_files'] = conflicting_files
                 context.user_data['overwrite_confirmation'] = []
