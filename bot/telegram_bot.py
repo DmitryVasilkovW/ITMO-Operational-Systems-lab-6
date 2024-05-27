@@ -217,7 +217,15 @@ def handle_overwrite_response(update: Update, context: CallbackContext):
 
     if len(overwrite_confirmation) < len(conflicting_files):
         next_file = conflicting_files[len(overwrite_confirmation)]
-        update.message.reply_text(f"Хотите перезаписать файл {next_file[0]} -> {next_file[1]}? (да/нет)")
+        filename, conflicting_filename, message = next_file
+
+        if not filename.endswith(".png"):
+            filename += ".png"
+
+        if not conflicting_filename.endswith(".jpg"):
+            conflicting_filename = filename[:-4] + '.jpg'
+
+        update.message.reply_text(f"Хотите перезаписать файл {filename} -> {conflicting_filename}? (да/нет)")
     else:
         process_overwrites(update, context)
         return ConversationHandler.END
@@ -247,8 +255,9 @@ def process_overwrites(update: Update, context: CallbackContext):
 
             elif filename.endswith(".jpg"):
                 output_filename_png = filename[:-4] + '.png'
+                output_filename_jpg = filename[:-4] + '.jpg'
                 output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
-                overwritten_files.append(f"{filename} -> {output_filename_png}")
+                overwritten_files.append(f"{filename} -> {output_filename_jpg}")
 
                 shutil.copy(source_path, output_path_png)
                 create_empty_jpg(output_path_png)
