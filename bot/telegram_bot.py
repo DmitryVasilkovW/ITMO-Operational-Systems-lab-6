@@ -39,8 +39,6 @@ def handle_private(update, context):
     elif '/mv' in message_text:
         move(update, context)
 
-    elif message_text.startswith('/convert '):
-        convert_command(update, context)
 
 
 def handle_mention(update, context):
@@ -58,9 +56,6 @@ def handle_mention(update, context):
 
         elif '/mv' in message_text:
             move(update, context)
-
-        elif '/convert ' in message_text:
-            convert_command(update, context)
 
 
 def save_file_command(update, context):
@@ -206,6 +201,62 @@ def stop_command(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
+def handle_overwrite_response(update: Update, context: CallbackContext):
+    response = update.message.text.lower()
+    overwrite_confirmation = context.user_data['overwrite_confirmation']
+    conflicting_files = context.user_data['conflicting_files']
+    path = context.user_data['path']
+
+    if response in ["да", "ок", "конечно", "хорошо", "+"]:
+        overwrite_confirmation.append(True)
+    elif response in ["нет", "не", "неа", "-"]:
+        overwrite_confirmation.append(False)
+    else:
+        update.message.reply_text("Пожалуйста, ответьте 'да' или 'нет'.")
+        return
+
+    if len(overwrite_confirmation) < len(conflicting_files):
+        next_file = conflicting_files[len(overwrite_confirmation)]
+        update.message.reply_text(f"Хотите перезаписать файл {next_file[0]} -> {next_file[1]}? (да/нет)")
+    else:
+        process_overwrites(update, context)
+        return ConversationHandler.END
+
+
+def process_overwrites(update: Update, context: CallbackContext):
+    overwritten_files = []
+    conflicting_files = context.user_data['conflicting_files']
+    overwrite_confirmation = context.user_data['overwrite_confirmation']
+    path = context.user_data['path']
+
+    for i, (filename, conflicting_filename, message) in enumerate(conflicting_files):
+        if overwrite_confirmation[i]:
+            source_path = os.path.join(path, filename)
+            destination_path = os.path.join(MOUNT_POINT, conflicting_filename)
+
+            if os.path.exists(destination_path):
+                os.remove(destination_path)
+
+            if filename.endswith(".png"):
+                output_filename_jpg = filename[:-4] + '.jpg'
+                overwritten_files.append(f"{filename} -> {output_filename_jpg}")
+                output_path_png = os.path.join(MOUNT_POINT, filename)
+
+                shutil.copy(source_path, output_path_png)
+                create_empty_jpg(output_path_png)
+
+            elif filename.endswith(".jpg"):
+                output_filename_png = filename[:-4] + '.png'
+                output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
+                overwritten_files.append(f"{filename} -> {output_filename_png}")
+
+                shutil.copy(source_path, output_path_png)
+                create_empty_jpg(output_path_png)
+
+    overwrite_response_message = "Перезаписанные файлы:\n" + "\n".join(overwritten_files)
+    update.message.reply_text(overwrite_response_message)
+
+
 def convert_command(update: Update, context: CallbackContext):
     message_text = update.message.text
     match = re.search(r'/convert\s+(\S+)$', message_text)
@@ -280,67 +331,14 @@ def convert_command(update: Update, context: CallbackContext):
                     response_message += f"  - {filename} -> {conflicting_filename} ({message})\n"
                 response_message += "\nХотите перезаписать файлы? (да/нет)"
 
-                conflicting_files_filtered = conflicting_files.copy()
-                overwrite_confirmation = []
-
-                def handle_overwrite_response(update, context):
-                    response = update.message.text.lower()
-                    if response in ["да", "ок", "конечно", "хорошо", "+"]:
-                        overwrite_confirmation.append(True)
-                    elif response in ["нет", "не", "неа", "-"]:
-                        overwrite_confirmation.append(False)
-                    else:
-                        update.message.reply_text("Пожалуйста, ответьте 'да' или 'нет'.")
-                        return
-
-                    if len(overwrite_confirmation) < len(conflicting_files_filtered):
-                        next_file = conflicting_files_filtered[len(overwrite_confirmation)]
-                        update.message.reply_text(
-                            f"Хотите перезаписать файл {next_file[0]} -> {next_file[1]}? (да/нет)")
-                    else:
-                        process_overwrites(update, context)
-
-                def process_overwrites(update, context):
-                    overwritten_files = []
-
-                    for i, (filename, conflicting_filename, message) in enumerate(conflicting_files_filtered):
-                        if overwrite_confirmation[i]:
-                            source_path = os.path.join(path, filename)
-                            destination_path = os.path.join(MOUNT_POINT, conflicting_filename)
-
-                            if os.path.exists(destination_path):
-                                os.remove(destination_path)
-
-                            if filename.endswith(".png"):
-                                output_filename_jpg = filename[:-4] + '.jpg'
-                                overwritten_files.append(f"{filename} -> {output_filename_jpg}")
-                                output_path_png = os.path.join(MOUNT_POINT, filename)
-
-                                shutil.copy(source_path, output_path_png)
-                                create_empty_jpg(output_path_png)
-
-                            elif filename.endswith(".jpg"):
-                                output_filename_png = filename[:-4] + '.png'
-                                output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
-                                overwritten_files.append(f"{filename} -> {output_filename_png}")
-
-                                shutil.copy(source_path, output_path_png)
-                                create_empty_jpg(output_path_png)
-
-                    overwrite_response_message = "Перезаписанные файлы:\n" + "\n".join(overwritten_files)
-                    update.message.reply_text(overwrite_response_message)
-
-                    context.dispatcher.remove_handler(handle_overwrite_response)
-
-                    return ConversationHandler.END
+                context.user_data['conflicting_files'] = conflicting_files
+                context.user_data['overwrite_confirmation'] = []
+                context.user_data['path'] = path
 
                 update.message.reply_text(response_message)
-                next_file = conflicting_files_filtered[0]
+                next_file = conflicting_files[0]
                 update.message.reply_text(f"Хотите перезаписать файл {next_file[0]} -> {next_file[1]}? (да/нет)")
-                context.dispatcher.add_handler(
-                    MessageHandler(Filters.text & ~Filters.command, handle_overwrite_response))
-
-                return
+                return 'handle_overwrite_response'
 
             update.message.reply_text(response_message)
 
