@@ -14,6 +14,12 @@ from fs_utils import unmount_fs, start_fuse
 fuse_stopped = False
 
 
+def check_fuse(update):
+    if fuse_stopped:
+        update.message.reply_text('Файловая система не активна.')
+        return ConversationHandler.END
+
+
 def split_and_send_message(update: Update, message: str):
     max_message_length = 4096
     for i in range(0, len(message), max_message_length):
@@ -56,6 +62,9 @@ def handle_private(update, context):
 
     elif message_text.startswith('/cp'):
         cp(update, context)
+
+    elif message_text.startswith('/get'):
+        get_document(update, context)
 
     elif message_text.startswith('/convert '):
         match = re.search(r'/convert (\S+)', message_text)
@@ -100,6 +109,9 @@ def handle_mention(update, context):
             elif command == '/cp':
                 cp(update, context)
 
+            elif command == '/get':
+                get_document(update, context)
+
             elif command == '/convert':
                 if len(words) > 2:
                     path = words[2]
@@ -118,6 +130,9 @@ def cancel(update, context):
 
 
 def save_file_command(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     message_text = update.message.text
     match = re.search(r'^/save(?:\s+"([^"]+)"|\s+(\S+))?$', message_text)
     if not match:
@@ -141,6 +156,9 @@ def save_file_command(update: Update, context: CallbackContext):
 
 
 def save_file_mention_command(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     if check_mention(update, context):
         bot_username = context.bot.username
         message_text = update.message.text
@@ -167,6 +185,9 @@ def save_file_mention_command(update: Update, context: CallbackContext):
 
 
 def save_file(update, context):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     if 'save_user_id' in context.user_data and context.user_data['save_user_id'] == update.message.from_user.id:
         file_info = None
         filename = None
@@ -228,7 +249,35 @@ def save_file(update, context):
         return context.user_data['save_context']
 
 
+def get_document(update, context):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/get\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /get <filename>.")
+        return
+
+    relative_path = match.group(1) or match.group(2)
+    if relative_path is None:
+        update.message.reply_text("Ошибка: используйте /get <filename>.")
+        return
+
+    absolute_path = os.path.join(MOUNT_POINT, relative_path)
+
+    if not os.path.exists(absolute_path) or not os.path.isfile(absolute_path):
+        update.message.reply_text(f"Ошибка: файл {relative_path} не найден.")
+        return
+
+    with open(absolute_path, 'rb') as file:
+        update.message.reply_document(document=file)
+
+
 def mkdir(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     message_text = update.message.text
     bot_username = context.bot.username
     pattern = fr'@{bot_username}\s+/mkdir\s+(?:"([^"]+)"|(\S+))'
@@ -274,6 +323,9 @@ def mkdir(update: Update, context: CallbackContext):
 
 
 def move(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     message_text = update.message.text
     bot_username = context.bot.username
     pattern = fr'@{bot_username}\s+/mv\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
@@ -345,6 +397,9 @@ def add_suffix(path, counter, is_dir):
 
 
 def cp(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     bot_username = context.bot.username
     pattern = fr'@{bot_username}\s+/cp\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
     match = re.search(pattern, update.message.text)
@@ -438,6 +493,9 @@ def list_path_check(update, directory_path):
 
 
 def list_files(update, context):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     directory_path = '/'
     match = re.search(r'/ls\s+(?:"([^"]+)"|(\S+))', update.message.text)
 
@@ -465,6 +523,9 @@ def list_files(update, context):
 
 
 def tree_list_files(update, context):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     directory_path = '/'
     match = re.search(r'/trls\s+(?:"([^"]+)"|(\S+))', update.message.text)
 
@@ -520,6 +581,9 @@ def remove_file(update, context, target_path):
 
 
 def remove(update, context):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     match = re.search(r'/rm\s+"([^"]+)"', update.message.text)
     if match:
         target_path = match.group(1)
@@ -562,6 +626,9 @@ def start_command(update: Update, context: CallbackContext):
 
 
 def stop_command(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     global fuse_stopped
 
     user_id = update.message.from_user.id
