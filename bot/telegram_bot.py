@@ -6,7 +6,7 @@ import threading
 import re
 
 from telegram import Update, MessageEntity, Bot
-from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, Filters
+from telegram.ext import CallbackContext, ConversationHandler
 
 from bot.converter import create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
