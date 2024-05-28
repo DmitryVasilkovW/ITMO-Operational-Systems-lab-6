@@ -703,17 +703,26 @@ def stop_command(update: Update, context: CallbackContext):
 
 
 def convert_mention_command(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     if check_mention(update, context):
         context.user_data['overwrite_context'] = 'handle_overwrite_response_mention'
         return convert_command(update, context)
 
 
 def convert_private_command(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     context.user_data['overwrite_context'] = 'handle_overwrite_response_private'
     return convert_command(update, context)
 
 
 def handle_overwrite_response(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     response = update.message.text.lower()
     overwrite_confirmation = context.user_data['overwrite_confirmation']
     conflicting_files = context.user_data['conflicting_files']
@@ -744,6 +753,9 @@ def handle_overwrite_response(update: Update, context: CallbackContext):
 
 
 def process_overwrites(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     overwritten_files = []
     conflicting_files = context.user_data['conflicting_files']
     overwrite_confirmation = context.user_data['overwrite_confirmation']
@@ -779,6 +791,9 @@ def process_overwrites(update: Update, context: CallbackContext):
 
 
 def convert_command(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
     message_text = update.message.text
     match = re.search(r'/convert\s+(\S+)$', message_text)
 
