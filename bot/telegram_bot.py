@@ -439,16 +439,18 @@ def list_path_check(update, directory_path):
 
 def list_files(update, context):
     directory_path = '/'
-    match = re.search(r'/ls\s+(\S+)', update.message.text)
+    match = re.search(r'/ls\s+(?:"([^"]+)"|(\S+))', update.message.text)
 
     if match:
-        directory_path = match.group(1)
-
-        if re.search(r'/ls\s+(\S+)\s+(\S+)', update.message.text) is not None:
+        directory_path = match.group(1) or match.group(2)
+        if directory_path is None:
             update.message.reply_text("Ошибка: используйте /ls или /ls <dir>.")
             return ConversationHandler.END
 
         list_path_check(update, directory_path)
+    else:
+        update.message.reply_text("Ошибка: используйте /ls или /ls <dir>.")
+        return ConversationHandler.END
 
     files_list = file_list()
 
