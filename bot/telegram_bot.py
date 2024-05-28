@@ -117,20 +117,19 @@ def cancel(update, context):
     return ConversationHandler.END
 
 
-def save_file_command(update, context):
-    match = re.search(fr'^(/save|/save\s+(\S+))$', update.message.text)
-    if match is None:
-        update.message.reply_text('Неверный формат команды. Используйте /save или /save <directory>')
+def save_file_command(update: Update, context: CallbackContext):
+    message_text = update.message.text
+    match = re.search(r'^/save(?:\s+"([^"]+)"|\s+(\S+))?$', message_text)
+    if not match:
+        update.message.reply_text('Неверный формат команды. Используйте /save или /save "<directory>"')
         return ConversationHandler.END
 
-    match = re.search(fr'^/save\s+(\S+)$', update.message.text)
-
-    if match is not None:
-        if '/' == match.group(1)[0]:
+    directory = match.group(1) or match.group(2)
+    if directory:
+        if directory.startswith('/'):
             update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
             return ConversationHandler.END
-
-        context.user_data['save_dir'] = match.group(1)
+        context.user_data['save_dir'] = directory
     else:
         context.user_data['save_dir'] = MOUNT_POINT
 
@@ -141,26 +140,26 @@ def save_file_command(update, context):
     return 'waiting_for_file_private'
 
 
-def save_file_mention_command(update, context):
+def save_file_mention_command(update: Update, context: CallbackContext):
     if check_mention(update, context):
-        match = re.search(fr'^{context.user_data['bot_username']}\s+(/save|/save\s+(\S+))$', update.message.text)
-        if match is None:
-            update.message.reply_text('Неверный формат команды. Используйте /save или /save <directory>')
+        bot_username = context.bot.username
+        message_text = update.message.text
+        pattern = fr'^@{bot_username}\s+/save(?:\s+"([^"]+)"|\s+(\S+))?$'
+        match = re.search(pattern, message_text)
+        if not match:
+            update.message.reply_text(f'Неверный формат команды. Используйте /save или /save "<directory>"')
             return ConversationHandler.END
 
-        match = re.search(fr'^{context.user_data['bot_username']}\s+/save\s+(\S+)$', update.message.text)
-
-        if match is not None:
-            if '/' == match.group(1)[0]:
+        directory = match.group(1) or match.group(2)
+        if directory:
+            if directory.startswith('/'):
                 update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
                 return ConversationHandler.END
-
-            context.user_data['save_dir'] = match.group(1)
+            context.user_data['save_dir'] = directory
         else:
             context.user_data['save_dir'] = MOUNT_POINT
 
-        bot_username = context.user_data['bot_username']
-        update.message.reply_text(f'Отправьте файл или введите /cancel_save{bot_username} для отмены.')
+        update.message.reply_text(f'Отправьте файл или введите /cancel_save@{bot_username} для отмены.')
         context.user_data['save_user_id'] = update.message.from_user.id
         context.user_data['save_context'] = 'waiting_for_file_mention'
         context.user_data['attempt_count'] = 0
