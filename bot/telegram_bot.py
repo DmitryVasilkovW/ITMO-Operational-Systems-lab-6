@@ -9,7 +9,7 @@ from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
 from bot.converter import create_empty_jpg
-from bot.collect_metadata import save_metadata_to_storage
+from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
 
@@ -71,6 +71,12 @@ def handle_private(update, context):
     elif message_text.startswith('/getdir'):
         get_directory(update, context)
 
+    elif message_text.startswith('/ctime'):
+        ctime_command(update, context)
+
+    elif message_text.startswith('/mtime'):
+        mtime_command(update, context)
+
     elif message_text.startswith('/convert '):
         match = re.search(r'/convert (\S+)', message_text)
 
@@ -119,6 +125,12 @@ def handle_mention(update, context):
 
             elif command == '/getdir':
                 get_directory(update, context)
+
+            elif command == '/ctime':
+                ctime_command(update, context)
+
+            elif command == '/mtime':
+                mtime_command(update, context)
 
             elif command == '/convert':
                 if len(words) > 2:
@@ -653,6 +665,30 @@ def remove(update, context):
             "Ошибка: не удалось извлечь путь. Убедитесь, что команда введена правильно и путь заключен в кавычки.")
 
     return ConversationHandler.END
+
+
+def ctime_command(update, context):
+    message_text = update.message.text
+    match = re.search(r'/ctime\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /ctime <filename>.")
+        return
+
+    filename = match.group(1) or match.group(2)
+    ctime = get_ctime(filename)
+    update.message.reply_text(f"Дата создания файла {filename}: {ctime}")
+
+
+def mtime_command(update, context):
+    message_text = update.message.text
+    match = re.search(r'/mtime\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /mtime <filename>.")
+        return
+
+    filename = match.group(1) or match.group(2)
+    mtime = get_mtime(filename)
+    update.message.reply_text(f"Дата последнего изменения файла {filename}: {mtime}")
 
 
 def start_command(update: Update, context: CallbackContext):

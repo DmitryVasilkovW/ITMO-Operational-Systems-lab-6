@@ -2,8 +2,9 @@ import os
 import json
 import time
 import stat
+from datetime import datetime
 
-from config import logger
+from config import logger, STORAGE_PATH
 
 
 def collect_metadata(directory):
@@ -49,4 +50,37 @@ def save_metadata_to_storage(directory, metadata_path, data_path):
         logger.info(f"File data saved to {data_path}")
     except Exception as e:
         logger.error(f"Error saving file data to {data_path}: {e}")
+
+
+def load_metadata():
+    with open(STORAGE_PATH, 'r') as f:
+        return json.load(f)
+
+
+def format_timestamp(timestamp):
+    return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def get_ctime(filename):
+    metadata = load_metadata()
+    if filename in metadata['files']:
+        ctime = metadata['files'][filename].get('st_ctime')
+        if ctime:
+            return format_timestamp(ctime)
+        else:
+            return "Дата создания не найдена для файла."
+    else:
+        return "Файл не найден."
+
+
+def get_mtime(filename):
+    metadata = load_metadata()
+    if filename in metadata['files']:
+        mtime = metadata['files'][filename].get('st_mtime')
+        if mtime:
+            return format_timestamp(mtime)
+        else:
+            return "Дата последнего изменения не найдена для файла."
+    else:
+        return "Файл не найден."
 
