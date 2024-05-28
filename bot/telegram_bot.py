@@ -229,23 +229,31 @@ def save_file(update, context):
         return context.user_data['save_context']
 
 
-def mkdir(update, context):
-    match = re.search(r'/mkdir\s+(\S+)', update.message.text)
-    if match:
-        directory_name = match.group(1)
+def mkdir(update: Update, context: CallbackContext):
+    message_text = update.message.text
+    bot_username = context.bot.username
+    pattern = fr'@{bot_username}\s+/mkdir\s+(?:"([^"]+)"|(\S+))'
+    match = re.search(pattern, message_text)
+    if not match:
+        pattern = r'/mkdir\s+(?:"([^"]+)"|(\S+))'
+        match = re.search(pattern, message_text)
 
-        if re.search(r'/mkdir\s+(\S+)\s+(\S+)', update.message.text) is not None:
+    if match:
+        directory_name = match.group(1) or match.group(2)
+
+        if re.search(r'/mkdir\s+(\S+)\s+(\S+)', update.message.text) and re.search(r'/mkdir\s+"([^"]+)"',
+                                                                                   message_text) is None:
             update.message.reply_text("Ошибка: команда должна содержать только одно слово.")
             return ConversationHandler.END
 
-        if '/' == directory_name[0]:
+        if directory_name.startswith('/'):
             update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
             return ConversationHandler.END
 
         new_dir_path = os.path.join(MOUNT_POINT, directory_name)
 
         if os.path.exists(new_dir_path):
-            update.message.reply_text(f"Ошибка: директория {directory_name} уже существует")
+            update.message.reply_text(f"Ошибка: директория {directory_name} уже существует.")
             return ConversationHandler.END
 
         try:
@@ -257,8 +265,8 @@ def mkdir(update, context):
                 f"Directory {directory_name} created successfully at {new_dir_path} from chat_id {chat_id} and user_id {user_id}.")
             save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
-            logger.error(f"Error creating directory {directory_name}: {e}")
-            update.message.reply_text(f"Ошибка при создании директории")
+            logger.error(f"Ошибка при создании директории {directory_name}: {e}")
+            update.message.reply_text(f"Ошибка при создании директории.")
     else:
         update.message.reply_text(
             "Ошибка: не удалось извлечь имя директории. Убедитесь, что команда введена правильно.")
