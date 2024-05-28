@@ -14,15 +14,17 @@ def collect_metadata(directory, existing_files=None):
 
     def collect(dir_path):
         nonlocal files, data, now
+        directory_changed = False
         for entry in os.scandir(dir_path):
             path = os.path.relpath(entry.path, directory)
             if entry.is_dir():
                 if path not in files:
                     files[path] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
-                else:
+                    directory_changed = True
+                subdir_changed = collect(entry.path)
+                if subdir_changed:
                     files[path]['st_mtime'] = now
-                    files[path]['st_atime'] = now
-                collect(entry.path)
+                    directory_changed = True
             elif entry.is_file():
                 with open(entry.path, 'rb') as f:
                     content = f.read()
@@ -30,11 +32,18 @@ def collect_metadata(directory, existing_files=None):
                     files[path] = dict(st_mode=(stat.S_IFREG | 0o644), st_ctime=os.path.getctime(entry.path),
                                        st_mtime=os.path.getmtime(entry.path), st_atime=os.path.getatime(entry.path),
                                        st_size=len(content))
+                    directory_changed = True
                 else:
-                    files[path]['st_mtime'] = os.path.getmtime(entry.path)
-                    files[path]['st_atime'] = os.path.getatime(entry.path)
-                    files[path]['st_size'] = len(content)
+                    if files[path]['st_mtime'] != os.path.getmtime(entry.path):
+                        files[path]['st_mtime'] = os.path.getmtime(entry.path)
+                        directory_changed = True
+                    if files[path]['st_atime'] != os.path.getatime(entry.path):
+                        files[path]['st_atime'] = os.path.getatime(entry.path)
+                    if files[path]['st_size'] != len(content):
+                        files[path]['st_size'] = len(content)
+                        directory_changed = True
                 data[path] = content
+        return directory_changed
 
     collect(directory)
     return {'files': files, 'data': data}
@@ -53,7 +62,6 @@ def save_metadata_to_storage(directory, metadata_path, data_path):
     else:
         existing_files = {}
 
-    # Collect new metadata and merge it with existing metadata
     state = collect_metadata(directory, existing_files)
 
     metadata = {'files': state['files']}
@@ -108,4 +116,3 @@ def get_mtime(filename):
             return "Дата последнего изменения не найдена для файла."
     else:
         return "Файл не найден."
-
