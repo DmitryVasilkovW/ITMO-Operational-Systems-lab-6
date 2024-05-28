@@ -447,10 +447,8 @@ def list_files(update, context):
             update.message.reply_text("Ошибка: используйте /ls или /ls <dir>.")
             return ConversationHandler.END
 
-        list_path_check(update, directory_path)
-    else:
-        update.message.reply_text("Ошибка: используйте /ls или /ls <dir>.")
-        return ConversationHandler.END
+        if list_path_check(update, directory_path) is ConversationHandler.END:
+            return ConversationHandler.END
 
     files_list = file_list()
 
@@ -468,16 +466,16 @@ def list_files(update, context):
 
 def tree_list_files(update, context):
     directory_path = '/'
-    match = re.search(r'/trls\s+(\S+)', update.message.text)
+    match = re.search(r'/trls\s+(?:"([^"]+)"|(\S+))', update.message.text)
 
     if match:
-        directory_path = match.group(1)
-
-        if re.search(r'/trls\s+(\S+)\s+(\S+)', update.message.text) is not None:
+        directory_path = match.group(1) or match.group(2)
+        if directory_path is None:
             update.message.reply_text("Ошибка: используйте /trls или /trls <dir>.")
             return ConversationHandler.END
 
-        list_path_check(update, directory_path)
+        if list_path_check(update, directory_path) is ConversationHandler.END:
+            return ConversationHandler.END
 
     files_list = file_list()
     filtered_files = [file for file in files_list if file.startswith(f"<{directory_path}")]
