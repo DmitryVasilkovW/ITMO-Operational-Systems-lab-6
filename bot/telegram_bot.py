@@ -266,15 +266,21 @@ def mkdir(update, context):
     return ConversationHandler.END
 
 
-def move(update, context):
+def move(update: Update, context: CallbackContext):
     message_text = update.message.text
-    match = re.search(r'/mv\s+(\S+)\s+(\S+)$', message_text)
+    bot_username = context.bot.username
+    pattern = fr'@{bot_username}\s+/mv\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
+    match = re.search(pattern, message_text)
+    if not match:
+        pattern = r'/mv\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
+        match = re.search(pattern, message_text)
 
     if match:
-        source = match.group(1)
-        destination = match.group(2)
-        source_path = os.path.join(MOUNT_POINT, source)
-        destination_path = os.path.join(MOUNT_POINT, destination)
+        source = match.group(1) or match.group(2)
+        destination = match.group(3) or match.group(4)
+
+        source_path = os.path.join(MOUNT_POINT, source.lstrip('/'))
+        destination_path = os.path.join(MOUNT_POINT, destination.lstrip('/'))
 
         if source_path == destination_path:
             update.message.reply_text(f"Ошибка: Исходный путь {source} и путь назначения {destination} равны.")
