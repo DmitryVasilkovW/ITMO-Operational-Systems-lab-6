@@ -29,7 +29,7 @@ def main():
     file_list()
 
     conv_handler_convert_command_private = ConversationHandler(
-        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(r'\s+(/convert)$'), convert_private_command)],
+        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(fr'^(/convert(?:\s+\S+)+)$'), convert_private_command)],
         states={
             'handle_overwrite_response_private': [MessageHandler(Filters.text & ~Filters.command, handle_overwrite_response)]
         },
@@ -37,7 +37,7 @@ def main():
     )
 
     conv_handler_convert_command_mention = ConversationHandler(
-        entry_points=[MessageHandler(Filters.entity(MessageEntity.MENTION) & Filters.regex(fr'^{bot_username}\s+(/convert)$'),
+        entry_points=[MessageHandler(Filters.entity(MessageEntity.MENTION) & Filters.regex(fr'^{bot_username}\s+(/convert(?:\s+\S+)+)$'),
                                      convert_mention_command)],
         states={
             'handle_overwrite_response_mention': [MessageHandler(~Filters.command, handle_overwrite_response)]
