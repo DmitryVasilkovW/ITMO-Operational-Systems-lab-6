@@ -54,6 +54,9 @@ def handle_private(update, context):
     elif message_text.startswith('/rm'):
         remove(update, context)
 
+    elif message_text.startswith('/cp'):
+        cp(update, context)
+
     elif message_text.startswith('/convert '):
         match = re.search(r'/convert (\S+)', message_text)
 
@@ -93,6 +96,9 @@ def handle_mention(update, context):
 
             elif command == '/rm':
                 remove(update, context)
+
+            elif command == '/cp':
+                cp(update, context)
 
             elif command == '/convert':
                 if len(words) > 2:
@@ -161,7 +167,7 @@ def save_file_mention_command(update, context):
         return 'waiting_for_file_mention'
 
 
-def save_file(update: Update, context: CallbackContext):
+def save_file(update, context):
     if 'save_user_id' in context.user_data and context.user_data['save_user_id'] == update.message.from_user.id:
         file_info = None
         filename = None
@@ -223,7 +229,7 @@ def save_file(update: Update, context: CallbackContext):
         return context.user_data['save_context']
 
 
-def mkdir(update: Update, context: CallbackContext):
+def mkdir(update, context):
     match = re.search(r'/mkdir\s+(\S+)', update.message.text)
     if match:
         directory_name = match.group(1)
@@ -295,6 +301,77 @@ def move(update, context):
             update.message.reply_text(f"Ошибка при перемещении")
     else:
         update.message.reply_text("Ошибка: неправильный формат команды. Используйте /mv <источник> <назначение>.")
+
+    return ConversationHandler.END
+
+
+def copy_path_with_suffix(src, dst):
+    if os.path.exists(dst) and os.path.isdir(dst):
+        dst = os.path.join(dst, os.path.basename(src))
+    original_dst = dst
+    counter = 1
+    while os.path.exists(dst):
+        dst = add_suffix(original_dst, counter, os.path.isdir(src))
+        counter += 1
+    if os.path.isdir(src):
+        shutil.copytree(src, dst)
+    else:
+        shutil.copy(src, dst)
+
+    return dst
+
+
+def add_suffix(path, counter, is_dir):
+    dirname, basename = os.path.split(path)
+    if is_dir:
+        new_basename = f"{basename}({counter})"
+    else:
+        name, ext = os.path.splitext(basename)
+        new_basename = f"{name}({counter}){ext}"
+    return os.path.join(dirname, new_basename)
+
+
+def cp(update: Update, context: CallbackContext):
+    bot_username = context.bot.username
+    pattern = fr'@{bot_username}\s+/cp\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
+    match = re.search(pattern, update.message.text)
+    if not match:
+        pattern = r'/cp\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
+        match = re.search(pattern, update.message.text)
+
+    if match:
+        src = match.group(1) or match.group(2)
+        dst = match.group(3) or match.group(4)
+
+        if src and dst:
+            src = src.lstrip('/')
+            dst = dst.lstrip('/')
+
+            src_path = os.path.join(MOUNT_POINT, src)
+            dst_path = os.path.join(MOUNT_POINT, dst)
+
+            if not os.path.exists(src_path):
+                update.message.reply_text(f"Ошибка: исходный путь {src} не существует.")
+                return ConversationHandler.END
+
+            try:
+                new_dst_path = copy_path_with_suffix(src_path, dst_path)
+                relative_new_dst_path = os.path.relpath(new_dst_path, MOUNT_POINT)
+                update.message.reply_text(f"{src} успешно скопирован в {relative_new_dst_path}.")
+                chat_id = update.message.chat_id
+                user_id = update.message.from_user.id
+                logger.info(
+                    f"Path {src} copied to {relative_new_dst_path} from chat_id {chat_id} and user_id {user_id}.")
+                save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            except Exception as e:
+                logger.error(f"Error copying {src} to {dst}: {e}")
+                update.message.reply_text(f"Ошибка при копировании {src} в {dst}.")
+        else:
+            update.message.reply_text("Ошибка: используйте /cp <src> <dst>.")
+    else:
+        update.message.reply_text(
+            "Ошибка: не удалось извлечь пути. Убедитесь, что команда введена правильно в формате /cp \"<src>\" \"<dst>\" или /cp <src> <dst>."
+        )
 
     return ConversationHandler.END
 
