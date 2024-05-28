@@ -19,7 +19,8 @@ def collect_metadata(directory, existing_files=None):
             path = os.path.relpath(entry.path, directory)
             if entry.is_dir():
                 if path not in files:
-                    files[path] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
+                    files[path] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now,
+                                       st_nlink=2)
                     directory_changed = True
                 subdir_changed = collect(entry.path)
                 if subdir_changed:
@@ -50,7 +51,6 @@ def collect_metadata(directory, existing_files=None):
 
 
 def save_metadata_to_storage(directory, metadata_path, data_path):
-    # Load existing metadata if it exists
     if os.path.exists(metadata_path):
         try:
             with open(metadata_path, 'r') as f:
