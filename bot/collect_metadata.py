@@ -7,8 +7,8 @@ from datetime import datetime
 from config import logger, STORAGE_PATH
 
 
-def collect_metadata(directory):
-    files = {}
+def collect_metadata(directory, existing_files=None):
+    files = existing_files if existing_files is not None else {}
     data = {}
     now = time.time()
 
@@ -17,23 +17,44 @@ def collect_metadata(directory):
         for entry in os.scandir(dir_path):
             path = os.path.relpath(entry.path, directory)
             if entry.is_dir():
-                files[path] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
+                if path not in files:
+                    files[path] = dict(st_mode=(stat.S_IFDIR | 0o755), st_ctime=now, st_mtime=now, st_atime=now, st_nlink=2)
+                else:
+                    files[path]['st_mtime'] = now
+                    files[path]['st_atime'] = now
                 collect(entry.path)
             elif entry.is_file():
                 with open(entry.path, 'rb') as f:
                     content = f.read()
-                files[path] = dict(st_mode=(stat.S_IFREG | 0o644), st_ctime=os.path.getctime(entry.path),
-                                   st_mtime=os.path.getmtime(entry.path), st_atime=os.path.getatime(entry.path),
-                                   st_size=len(content))
+                if path not in files:
+                    files[path] = dict(st_mode=(stat.S_IFREG | 0o644), st_ctime=os.path.getctime(entry.path),
+                                       st_mtime=os.path.getmtime(entry.path), st_atime=os.path.getatime(entry.path),
+                                       st_size=len(content))
+                else:
+                    files[path]['st_mtime'] = os.path.getmtime(entry.path)
+                    files[path]['st_atime'] = os.path.getatime(entry.path)
+                    files[path]['st_size'] = len(content)
                 data[path] = content
 
     collect(directory)
-
     return {'files': files, 'data': data}
 
 
 def save_metadata_to_storage(directory, metadata_path, data_path):
-    state = collect_metadata(directory)
+    # Load existing metadata if it exists
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, 'r') as f:
+                existing_metadata = json.load(f)
+            existing_files = existing_metadata.get('files', {})
+        except Exception as e:
+            logger.error(f"Error loading existing metadata from {metadata_path}: {e}")
+            existing_files = {}
+    else:
+        existing_files = {}
+
+    # Collect new metadata and merge it with existing metadata
+    state = collect_metadata(directory, existing_files)
 
     metadata = {'files': state['files']}
     try:
@@ -53,8 +74,12 @@ def save_metadata_to_storage(directory, metadata_path, data_path):
 
 
 def load_metadata():
-    with open(STORAGE_PATH, 'r') as f:
-        return json.load(f)
+    try:
+        with open(STORAGE_PATH, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading metadata from {STORAGE_PATH}: {e}")
+        return {'files': {}}
 
 
 def format_timestamp(timestamp):
