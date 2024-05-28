@@ -1,5 +1,7 @@
 import os
 import shutil
+import tarfile
+import tempfile
 import threading
 import re
 
@@ -66,6 +68,9 @@ def handle_private(update, context):
     elif message_text.startswith('/get'):
         get_document(update, context)
 
+    elif message_text.startswith('/getdir'):
+        get_directory(update, context)
+
     elif message_text.startswith('/convert '):
         match = re.search(r'/convert (\S+)', message_text)
 
@@ -111,6 +116,9 @@ def handle_mention(update, context):
 
             elif command == '/get':
                 get_document(update, context)
+
+            elif command == '/getdir':
+                get_directory(update, context)
 
             elif command == '/convert':
                 if len(words) > 2:
@@ -272,6 +280,41 @@ def get_document(update, context):
 
     with open(absolute_path, 'rb') as file:
         update.message.reply_document(document=file)
+
+
+def get_directory(update, context):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/getdir\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /getdir <directory>.")
+        return
+
+    relative_path = match.group(1) or match.group(2)
+    if relative_path is None:
+        update.message.reply_text("Ошибка: используйте /getdir <directory>.")
+        return
+
+    absolute_path = os.path.join(MOUNT_POINT, relative_path)
+
+    if not os.path.exists(absolute_path) or not os.path.isdir(absolute_path):
+        update.message.reply_text(f"Ошибка: директория {relative_path} не найдена.")
+        return
+
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        temp_file_path = temp_file.name
+
+    try:
+        with tarfile.open(temp_file_path, 'w') as tar:
+            tar.add(absolute_path, arcname=os.path.basename(absolute_path))
+
+        with open(temp_file_path, 'rb') as file:
+            update.message.reply_document(document=file, filename=f"{os.path.basename(absolute_path)}.tar")
+
+    finally:
+        os.unlink(temp_file_path)
 
 
 def mkdir(update: Update, context: CallbackContext):
