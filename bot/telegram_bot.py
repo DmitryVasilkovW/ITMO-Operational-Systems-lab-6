@@ -40,7 +40,6 @@ def handle_private(update, context):
         move(update, context)
 
 
-
 def handle_mention(update, context):
     if check_mention(update, context):
         message_text = update.message.text
@@ -201,6 +200,17 @@ def stop_command(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
+def convert_mention_command(update: Update, context: CallbackContext):
+    if check_mention(update, context):
+        context.user_data['overwrite_context'] = 'handle_overwrite_response_mention'
+        return convert_command(update, context)
+
+
+def convert_private_command(update: Update, context: CallbackContext):
+    context.user_data['overwrite_context'] = 'handle_overwrite_response_private'
+    return convert_command(update, context)
+
+
 def handle_overwrite_response(update: Update, context: CallbackContext):
     response = update.message.text.lower()
     overwrite_confirmation = context.user_data['overwrite_confirmation']
@@ -346,7 +356,8 @@ def convert_command(update: Update, context: CallbackContext):
                 update.message.reply_text(response_message)
                 next_file = conflicting_files[0]
                 update.message.reply_text(f"Хотите перезаписать файл {next_file[0]} -> {next_file[1]}? (да/нет)")
-                return 'handle_overwrite_response'
+
+                return context.user_data['overwrite_context']
 
             update.message.reply_text(response_message)
 

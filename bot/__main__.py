@@ -3,9 +3,9 @@ import signal
 import sys
 
 from telegram import Bot, MessageEntity
-from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler, CommandHandler
+from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler
 from telegram_bot import handle_private, handle_mention, save_file_command, save_file, save_file_mention_command, \
-    convert_command, handle_overwrite_response
+    handle_overwrite_response, convert_mention_command, convert_private_command
 from config import TOKEN
 from fs_utils import start_fuse, unmount_fs
 
@@ -26,10 +26,19 @@ def main():
     dp = updater.dispatcher
     dp.user_data['bot_username'] = "@" + Bot(TOKEN).get_me().username
 
-    conv_handler_convert_command = ConversationHandler(
-        entry_points=[MessageHandler(Filters.regex(r'/convert\b'), convert_command)],
+    conv_handler_convert_command_private = ConversationHandler(
+        entry_points=[MessageHandler(Filters.chat_type.private & Filters.regex(r'\bconvert\b'), convert_private_command)],
         states={
-            'handle_overwrite_response': [MessageHandler(Filters.text & ~Filters.command, handle_overwrite_response)],
+            'handle_overwrite_response_private': [MessageHandler(Filters.text & ~Filters.command, handle_overwrite_response)]
+        },
+        fallbacks=[]
+    )
+
+    conv_handler_convert_command_mention = ConversationHandler(
+        entry_points=[MessageHandler(Filters.entity(MessageEntity.MENTION) & Filters.regex(r'\bconvert\b'),
+                                     convert_mention_command)],
+        states={
+            'handle_overwrite_response_mention': [MessageHandler(~Filters.command, handle_overwrite_response)]
         },
         fallbacks=[]
     )
@@ -56,7 +65,8 @@ def main():
     #########################################################
     dp.add_handler(conv_handler_save_file_private)
     dp.add_handler(conv_handler_save_file_mention)
-    dp.add_handler(conv_handler_convert_command)
+    dp.add_handler(conv_handler_convert_command_private)
+    dp.add_handler(conv_handler_convert_command_mention)
 
     dp.add_handler(MessageHandler(Filters.command & Filters.chat_type.private, handle_private))
     dp.add_handler(MessageHandler(Filters.entity(MessageEntity.MENTION), handle_mention))
