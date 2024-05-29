@@ -32,8 +32,20 @@ def escape_markdown(text: str) -> str:
 def split_and_send_message(update, message):
     MAX_MESSAGE_LENGTH = 4096 - 10
     escaped_message = escape_markdown(message)
-    for start in range(0, len(escaped_message), MAX_MESSAGE_LENGTH):
-        update.message.reply_text(f"```\n{escaped_message[start:start + MAX_MESSAGE_LENGTH]}\n```", parse_mode='MarkdownV2')
+    lines = escaped_message.split('\n')
+
+    current_message = ""
+    for line in lines:
+        if len(current_message) + len(line) + 1 > MAX_MESSAGE_LENGTH:
+            update.message.reply_text(f"```\n{current_message}\n```", parse_mode='MarkdownV2')
+            current_message = line
+        else:
+            if current_message:
+                current_message += "\n"
+            current_message += line
+
+    if current_message:
+        update.message.reply_text(f"```\n{current_message}\n```", parse_mode='MarkdownV2')
 
 
 def check_mention(update, context) -> bool:
