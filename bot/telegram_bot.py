@@ -504,10 +504,7 @@ def file_list() -> list[str]:
             else:
                 relative_path = f"/{relative_path}"
             if os.path.islink(file_path):
-                target_path = os.readlink(file_path)
-                if not os.path.isabs(target_path):
-                    target_path = os.path.join(os.path.dirname(file_path), target_path)
-                files_list.append(f"<{relative_path}> {file} -> {target_path}")
+                files_list.append(f"<{relative_path}> {file} ->")
             else:
                 files_list.append(f"<{relative_path}> {file}")
     return files_list
@@ -530,10 +527,7 @@ def tree(directory: str, prefix: str = '') -> str:
             result.append(tree(full_path, prefix=prefix + extension))
         else:
             if os.path.islink(full_path):
-                target_path = os.readlink(full_path)
-                if not os.path.isabs(target_path):
-                    target_path = os.path.join(os.path.dirname(full_path), target_path)
-                result.append(f"{prefix}{pointer}{path} -> {target_path}")
+                result.append(f"{prefix}{pointer}{path} ->")
             else:
                 result.append(f"{prefix}{pointer}{path}")
     return '\n'.join(result)
