@@ -9,6 +9,7 @@ from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
 import config
+from bot.archivator import unzip_file, untar_file
 from bot.converter import create_empty_jpg, convert_png_to_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from config import logger, TOKEN, STORAGE_PATH, BACKUP_FILE
@@ -84,6 +85,9 @@ def handle_private(update, context):
     elif message_text.startswith('/returnmount'):
         revert_mount_dir(update, context)
 
+    elif message_text.startswith('/getarch'):
+        get_archive(update, context)
+
 
 def handle_mention(update, context):
     if check_mention(update, context):
@@ -129,11 +133,14 @@ def handle_mention(update, context):
             elif command == '/mtime':
                 mtime_command(update, context)
 
-            elif command =='/cd':
+            elif command == '/cd':
                 set_mount_dir(update, context)
 
-            elif command =='/returnmount':
+            elif command == '/returnmount':
                 revert_mount_dir(update, context)
+
+            elif command == '/getarch':
+                get_archive(update, context)
 
 
 def cancel(update, context):
@@ -990,3 +997,54 @@ def revert_mount_dir(update: Update, context: CallbackContext):
 
     return ConversationHandler.END
 
+
+def get_archive(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/getarch\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /getarch <directory_path>.")
+        return
+
+    directory_path = match.group(1) or match.group(2)
+    if directory_path is None:
+        update.message.reply_text("Ошибка: используйте /getarch <directory_path>.")
+        return
+
+    absolute_directory_path = os.path.abspath(directory_path)
+
+    # Проверяем, существует ли указанная директория
+    if not os.path.exists(absolute_directory_path) or not os.path.isdir(absolute_directory_path):
+        update.message.reply_text(f"Ошибка: директория {directory_path} не найдена.")
+        return
+
+    # Проходим по указанной директории и ищем архивы
+    for root, dirs, files in os.walk(absolute_directory_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if file.endswith('.zip') or file.endswith('.tar'):
+                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
+                extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
+                if file.endswith('.zip'):
+                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                elif file.endswith('.tar'):
+                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+
+    # Получаем структуру оригинальной директории и разархивированных файлов
+    original_tree_structure = tree(absolute_directory_path)
+    extracted_tree_structure = tree(config.MOUNT_POINT)
+
+    # Формируем итоговый ответ
+    response = f"Директория: {absolute_directory_path}\n"
+    response += f"{original_tree_structure}\n\nРазархивированные файлы:\n"
+    response += f"{extracted_tree_structure}"
+
+    # Преобразуем структуру дерева в строки и убираем пустые строки
+    tree_lines = [line for line in response.split('\n') if line.strip()]
+
+    # Собираем ответ для пользователя
+    final_response = "\n".join(tree_lines)
+
+    update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
