@@ -14,6 +14,7 @@ import config
 from bot.converter import create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from bot.custom_fs_utils import custom_start_fuse, custom_unmount_fs
+from bot.custom_listing_utils import parse_directory_listing
 from config import logger, TOKEN, STORAGE_PATH, BACKUP_FILE, CUSTOM_STORAGE_PATH, CUSTOM_BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
 from mutagen.easyid3 import EasyID3
@@ -1116,7 +1117,7 @@ def custom_list_files(update, context):
         if list_path_check(update, directory_path) is ConversationHandler.END:
             return ConversationHandler.END
 
-    commands = ["echo \"Total files $(find . -name '1.txt' -type f | wc -l)\"", "pass"] # метод для получения команд из конфига
+    commands = parse_directory_listing(custom_config_path)
 
     outputs = []
 
