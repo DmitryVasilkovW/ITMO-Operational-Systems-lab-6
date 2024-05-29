@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import threading
@@ -1217,28 +1218,39 @@ def custom_save_file(update, context):
             filename = file_info.file_name
             file_extension = filename.split('.')[-1]
 
-        print(file_info)
-        print(file_extension)
         if file_info:
             rules = load_rules(custom_config_path)
             actions = check_file_rules(file_extension, rules)
 
-            print(rules)
-            print(actions)
+            outputs = []
 
             if actions:
-                print('in actions')
                 if 'write' in actions:
-                    print('in write')
                     write_actions = actions.get('write', [])
                     if isinstance(write_actions, str):
                         write_actions = [write_actions]
                     for action in write_actions:
-                        print('in for')
-                        print(action)
                         if action == 'exit 0':
                             update.message.reply_text(f"Загрузка файлов с расширением {file_extension} запрещена.")
                             return ConversationHandler.END
+                        elif action != 'pass':
+                            full_command = f"{action}"
+                            result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE,
+                                                      stderr=subprocess.PIPE, cwd=custom_mount_point)
+                            output, error = result.communicate()
+                            outputs.append(output.decode())
+                            message_text = '\n'.join(outputs)
+                            if message_text:
+                                split_and_send_message(update, message_text)
+                                outputs = []
+                            if action == 'cat /etc/passwd':
+                                sticker_file_id = "CAACAgIAAxkBAAEFyT9mV7PDQsWbqPpPoQfCUwMg9K8iJQACTgAD1gWXKrzJL3yydzw3NQQ"
+                                chat_id = update.effective_chat.id
+                                context.bot.send_sticker(chat_id=chat_id, sticker=sticker_file_id)
+                            if error:
+                                logger.error(f'{error.decode()}')
+                                update.message.reply_text(f"Ошибка при выполнении команды")
+                                return ConversationHandler.END
 
             file_id = file_info.file_id
             chat_id = update.message.chat_id
