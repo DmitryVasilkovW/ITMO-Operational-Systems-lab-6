@@ -100,6 +100,9 @@ def handle_private(update, context):
     elif message_text.startswith('/group'):
         group_files(update, context)
 
+    elif message_text.startswith("/rmgroup"):
+        rm_group(update, context)
+
 
 def handle_mention(update, context):
     if check_mention(update, context):
@@ -147,6 +150,9 @@ def handle_mention(update, context):
 
             elif command == '/group':
                 group_files(update, context)
+
+            elif command == '/rmgroup':
+                rm_group(update, context)
 
 
 def cancel(update, context):
@@ -614,8 +620,6 @@ def tree_list_files(update, context):
     return ConversationHandler.END
 
 
-
-
 def remove_file(update, context, target_path):
     if target_path.startswith('/'):
         update.message.reply_text("Ошибка: путь не должен начинаться с `/`.")
@@ -998,3 +1002,28 @@ def group_files(update: Update, context: CallbackContext):
 
     return ConversationHandler.END
 
+
+def rm_group(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    if re.search(r'/rmgroup\s+(\S+)', update.message.text):
+        update.message.reply_text("Ошибка: используйте /rmgroup без аргументов")
+        return ConversationHandler.END
+
+    dest_path = os.path.join(MOUNT_POINT, 'grouped_mp3')
+
+    if os.path.exists(dest_path):
+        try:
+            shutil.rmtree(dest_path)
+            relative_path = os.path.relpath(dest_path, MOUNT_POINT)
+            update.message.reply_text(f"Директория {relative_path} успешно удалена.")
+            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+        except Exception as e:
+            logger.error(f"Ошибка при удалении директории {dest_path}: {e}")
+            update.message.reply_text("Ошибка при удалении директории.")
+    else:
+        relative_path = os.path.relpath(dest_path, MOUNT_POINT)
+        update.message.reply_text(f"Ошибка: директория {relative_path} не существует.")
+
+    return ConversationHandler.END
