@@ -1015,12 +1015,10 @@ def get_archive(update: Update, context: CallbackContext):
 
     absolute_directory_path = os.path.abspath(directory_path)
 
-    # Проверяем, существует ли указанная директория
     if not os.path.exists(absolute_directory_path) or not os.path.isdir(absolute_directory_path):
         update.message.reply_text(f"Ошибка: директория {directory_path} не найдена.")
         return
 
-    # Проходим по указанной директории и ищем архивы
     for root, dirs, files in os.walk(absolute_directory_path):
         for file in files:
             file_path = os.path.join(root, file)
@@ -1032,17 +1030,14 @@ def get_archive(update: Update, context: CallbackContext):
                 elif file.endswith('.tar'):
                     untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
 
-    # Получаем структуру оригинальной директории и разархивированных файлов
     original_tree_structure = tree(absolute_directory_path)
 
-    # Перезаписываем каталоги, если они уже существуют в маунт поинте
     for root, dirs, files in os.walk(config.MOUNT_POINT):
         for dir in dirs:
             dir_path = os.path.join(root, dir)
             if os.path.isdir(dir_path):
                 shutil.rmtree(dir_path)
 
-    # Проходим снова по указанной директории и копируем архивы
     for root, dirs, files in os.walk(absolute_directory_path):
         for file in files:
             file_path = os.path.join(root, file)
@@ -1056,15 +1051,12 @@ def get_archive(update: Update, context: CallbackContext):
 
     extracted_tree_structure = tree(config.MOUNT_POINT)
 
-    # Формируем итоговый ответ
     response = f"Директория: {absolute_directory_path}\n"
     response += f"{original_tree_structure}\n\nРазархивированные файлы:\n\n"
     response += f"{extracted_tree_structure}"
 
-    # Преобразуем структуру дерева в строки и убираем пустые строки
     tree_lines = [line for line in response.split('\n') if line.strip()]
 
-    # Собираем ответ для пользователя
     final_response = "\n".join(tree_lines)
 
     update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
