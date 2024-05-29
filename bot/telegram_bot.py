@@ -1100,29 +1100,6 @@ def custom_start_command(update, context):
     return ConversationHandler.END
 
 
-def custom_stop_command(update: Update, context: CallbackContext):
-    if check_custom_fuse(update) is ConversationHandler.END:
-        return ConversationHandler.END
-
-    global custom_fuse_stopped
-    global custom_mount_point
-    global custom_config_path
-
-    user_id = update.message.from_user.id
-    logger.info(f"Stop command received from user_id: {user_id}")
-
-    update.message.reply_text('Останавливаю работу кастомной файловой системы...')
-
-    custom_unmount_fs(custom_mount_point)
-    custom_fuse_stopped = True
-
-    logger.info("Fuse stopped")
-    save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
-    custom_mount_point = ''
-    custom_config_path = ''
-    return ConversationHandler.END
-
-
 def custom_list_files(update, context):
     if check_custom_fuse(update) is ConversationHandler.END:
         return ConversationHandler.END
@@ -1142,7 +1119,6 @@ def custom_list_files(update, context):
     commands = ["echo \"Total files $(find . -name '1.txt' -type f | wc -l)\"", "pass"] # метод для получения команд из конфига
 
     outputs = []
-    rest_lines = []
 
     try:
         for command in commands:
@@ -1156,13 +1132,13 @@ def custom_list_files(update, context):
                     return ConversationHandler.END
             else:
                 try:
-                    command = "ls -l"
+                    command = "ls -l | grep -v total"
                     result = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                               cwd=directory_path)
                     output, error = result.communicate()
                     ls_output = output.decode().strip()
-                    ls_outputs = ls_output.split('\n')
-                    rest_lines = ls_outputs[1:]
+                    if ls_output:
+                        outputs.append(ls_output)
                     if error:
                         update.message.reply_text(f"Ошибка при выполнении команды: {error.decode()}")
                         return ConversationHandler.END
@@ -1173,10 +1149,8 @@ def custom_list_files(update, context):
         update.message.reply_text(f"Произошла ошибка при выполнении команды: {str(e)}")
         return ConversationHandler.END
 
-    for output in outputs:
-        update.message.reply_text(output)
-
-    for line in rest_lines:
-        update.message.reply_text(line)
+    message_text = '\n'.join(outputs)
+    if message_text:
+        split_and_send_message(update, message_text)
 
     return ConversationHandler.END
