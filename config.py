@@ -13,3 +13,5 @@ TOKEN = os.getenv('TOKEN')
 MOUNT_POINT = os.getenv('MOUNT_POINT')
 STORAGE_PATH = os.getenv('STORAGE_PATH')
 BACKUP_FILE = os.getenv('BACKUP_FILE')
+RESERVED_MOUNT_POINT = ""
+IS_RESERVED = False
