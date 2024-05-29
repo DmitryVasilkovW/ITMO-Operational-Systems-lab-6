@@ -123,6 +123,9 @@ def handle_private(update, context):
     elif message_text.startswith('/c_stop'):
         custom_stop_command(update, context)
 
+    elif message_text.startswith('/c_get'):
+        custom_get_document(update, context)
+
 
 def handle_mention(update, context):
     if check_mention(update, context):
@@ -179,6 +182,9 @@ def handle_mention(update, context):
 
             elif command == '/c_stop':
                 custom_stop_command(update, context)
+
+            elif command == '/c_get':
+                custom_get_document(update, context)
 
 
 def cancel(update, context):
@@ -1290,3 +1296,54 @@ def custom_save_file(update, context):
                 return context.user_data['context_save_context']
     else:
         return context.user_data['custom_save_context']
+
+
+def custom_get_document(update, context):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/c_get\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /c_get <filename>.")
+        return
+
+    relative_path = match.group(1) or match.group(2)
+    if relative_path is None:
+        update.message.reply_text("Ошибка: используйте /c_get <filename>.")
+        return
+
+    absolute_path = os.path.join(custom_mount_point, relative_path)
+
+    if not os.path.exists(absolute_path) or not os.path.isfile(absolute_path):
+        update.message.reply_text(f"Ошибка: файл {relative_path} не найден.")
+        return
+
+    rules = load_rules(custom_config_path)
+    file_extension = os.path.splitext(relative_path)[1].lstrip('.')
+    actions = check_file_rules(file_extension, rules)
+
+    if actions:
+        if 'read' in actions:
+            read_actions = actions.get('read', [])
+            if isinstance(read_actions, str):
+                read_actions = [read_actions]
+            for action in read_actions:
+                if action == 'exit 0':
+                    update.message.reply_text(f"Чтение файла {relative_path} запрещено.")
+                    return ConversationHandler.END
+                elif action != 'pass':
+                    full_command = action.format(filename=relative_path)
+                    result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE,
+                                              stderr=subprocess.PIPE, cwd=custom_mount_point)
+                    output, error = result.communicate()
+                    message_text = output.decode()
+                    if message_text:
+                        split_and_send_message(update, message_text)
+                    if error:
+                        logger.error(error.decode())
+                        update.message.reply_text(f"Ошибка при чтении файла {relative_path}")
+                        return ConversationHandler.END
+
+    with open(absolute_path, 'rb') as file:
+        update.message.reply_document(document=file)
