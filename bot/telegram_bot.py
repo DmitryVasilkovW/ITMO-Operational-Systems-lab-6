@@ -1034,11 +1034,31 @@ def get_archive(update: Update, context: CallbackContext):
 
     # Получаем структуру оригинальной директории и разархивированных файлов
     original_tree_structure = tree(absolute_directory_path)
+
+    # Перезаписываем каталоги, если они уже существуют в маунт поинте
+    for root, dirs, files in os.walk(config.MOUNT_POINT):
+        for dir in dirs:
+            dir_path = os.path.join(root, dir)
+            if os.path.isdir(dir_path):
+                shutil.rmtree(dir_path)
+
+    # Проходим снова по указанной директории и копируем архивы
+    for root, dirs, files in os.walk(absolute_directory_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if file.endswith('.zip') or file.endswith('.tar'):
+                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
+                extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
+                if file.endswith('.zip'):
+                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                elif file.endswith('.tar'):
+                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+
     extracted_tree_structure = tree(config.MOUNT_POINT)
 
     # Формируем итоговый ответ
     response = f"Директория: {absolute_directory_path}\n"
-    response += f"{original_tree_structure}\n\nРазархивированные файлы:\n"
+    response += f"{original_tree_structure}\n\nРазархивированные файлы:\n\n"
     response += f"{extracted_tree_structure}"
 
     # Преобразуем структуру дерева в строки и убираем пустые строки
