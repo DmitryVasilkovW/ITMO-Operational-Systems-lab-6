@@ -1114,3 +1114,123 @@ def custom_stop_command(update: Update, context: CallbackContext):
     custom_mount_point = ''
     custom_config_path = ''
     return ConversationHandler.END
+
+
+def custom_save_file_command(update: Update, context: CallbackContext):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'^/c_save(?:\s+"([^"]+)"|\s+(\S+))?$', message_text)
+    if not match:
+        update.message.reply_text('Неверный формат команды. Используйте /c_save или /c_save "<directory>"')
+        return ConversationHandler.END
+
+    directory = match.group(1) or match.group(2)
+    if directory:
+        if directory.startswith('/'):
+            update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
+            return ConversationHandler.END
+        context.user_data['custom_save_dir'] = directory
+    else:
+        context.user_data['custom_save_dir'] = custom_mount_point
+
+    update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
+    context.user_data['custom_save_user_id'] = update.message.from_user.id
+    context.user_data['custom_save_context'] = 'custom_waiting_for_file_private'
+    context.user_data['custom_attempt_count'] = 0
+    return 'custom_waiting_for_file_private'
+
+
+def custom_save_file_mention_command(update: Update, context: CallbackContext):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    if check_mention(update, context):
+        bot_username = context.bot.username
+        message_text = update.message.text
+        pattern = fr'^@{bot_username}\s+/c_save(?:\s+"([^"]+)"|\s+(\S+))?$'
+        match = re.search(pattern, message_text)
+        if not match:
+            update.message.reply_text(f'Неверный формат команды. Используйте /c_save или /c_save "<directory>"')
+            return ConversationHandler.END
+
+        directory = match.group(1) or match.group(2)
+        if directory:
+            if directory.startswith('/'):
+                update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
+                return ConversationHandler.END
+            context.user_data['custom_save_dir'] = directory
+        else:
+            context.user_data['custom_save_dir'] = custom_mount_point
+
+        update.message.reply_text(f'Отправьте файл или введите /cancel_save@{bot_username} для отмены.')
+        context.user_data['custom_save_user_id'] = update.message.from_user.id
+        context.user_data['custom_save_context'] = 'custom_waiting_for_file_mention'
+        context.user_data['custom_attempt_count'] = 0
+        return 'custom_waiting_for_file_mention'
+
+
+def custom_save_file(update, context):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    if 'custom_save_user_id' in context.user_data and context.user_data['custom_save_user_id'] == update.message.from_user.id:
+        file_info = None
+        filename = None
+
+        if update.message.document:
+            file_info = update.message.document
+            filename = file_info.file_name
+        elif update.message.photo:
+            file_info = update.message.photo[-1]
+            filename = f"photo_{file_info.file_unique_id}.jpg"
+        elif update.message.video:
+            file_info = update.message.video
+            filename = file_info.file_name
+        elif update.message.animation:
+            file_info = update.message.animation
+            filename = file_info.file_name
+        elif update.message.audio:
+            file_info = update.message.audio
+            filename = file_info.file_name
+
+        if file_info:
+            file_id = file_info.file_id
+            chat_id = update.message.chat_id
+            user_id = update.message.from_user.id
+            logger.info(f"Received file from chat_id: {chat_id}")
+            logger.info(f"Received file from user_id: {user_id}")
+            logger.info(f"File received: file_id={file_id}, filename={filename}")
+
+            save_dir = context.user_data.get('custom_save_dir', custom_mount_point)
+            local_path = os.path.join(custom_mount_point, save_dir, filename)
+
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+            if os.path.exists(local_path):
+                update.message.reply_text(
+                    f"Файл с именем {filename} уже существует. Пожалуйста, отправьте файл с другим именем.")
+                return context.user_data['custom_save_context']
+
+            file = context.bot.get_file(file_id)
+            file.download(local_path)
+            logger.info(f"File downloaded to: {local_path}")
+
+            update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
+            save_metadata_to_storage(custom_mount_point, CUSTOM_STORAGE_PATH, CUSTOM_BACKUP_FILE)
+            return ConversationHandler.END
+        else:
+            context.user_data['custom_attempt_count'] += 1
+            if context.user_data['custom_attempt_count'] >= 3:
+                update.message.reply_text("Превышено количество попыток отправки файла.")
+                return ConversationHandler.END
+            else:
+                if context.user_data['custom_save_context'] == 'custom_waiting_for_file_mention':
+                    bot_username = context.user_data['bot_username']
+                    update.message.reply_text(f'Отправьте файл или введите /cancel_save{bot_username} для отмены.')
+                else:
+                    update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
+                return context.user_data['save_context']
+    else:
+        return context.user_data['custom_save_context']
