@@ -1,0 +1,13 @@
+filetypes:
+  - md:
+      read: pandoc {{ filename }} -o {{ filename_without_extension }}.pdf
+  - png:
+      write: exit 0
+      read: cat /root/default.png
+  - other:
+      read:
+        - pass
+        - echo $(date)
+DIRECTORY_LISTING:
+  - echo "Total files $(find . -name '1.txt' -type f | wc -l)"
+  - pass
