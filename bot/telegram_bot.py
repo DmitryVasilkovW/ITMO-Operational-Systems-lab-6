@@ -182,6 +182,9 @@ def handle_mention(update, context):
             elif command == '/c_stop':
                 custom_stop_command(update, context)
 
+            elif command == '/c_ls':
+                custom_list_files(update, context)
+
 
 def cancel(update, context):
     update.message.reply_text('Операция отменена.')
