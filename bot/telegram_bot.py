@@ -4,6 +4,7 @@ import tarfile
 import tempfile
 import threading
 import re
+from functools import partial
 
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
@@ -11,12 +12,22 @@ from telegram.ext import CallbackContext, ConversationHandler
 import config
 from bot.converter import create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
-from config import logger, TOKEN, STORAGE_PATH, BACKUP_FILE
+from bot.custom_fs_utils import custom_start_fuse, custom_unmount_fs
+from config import logger, TOKEN, STORAGE_PATH, BACKUP_FILE, CUSTOM_STORAGE_PATH, CUSTOM_BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import error
 
 fuse_stopped = False
+custom_fuse_stopped = False
+custom_mount_point = ''
+custom_config_path = ''
+
+
+def check_custom_fuse(update):
+    if custom_fuse_stopped:
+        update.message.reply_text('Кастомная файловая система не активна.')
+        return ConversationHandler.END
 
 
 def check_fuse(update):
@@ -101,8 +112,14 @@ def handle_private(update, context):
     elif message_text.startswith('/group'):
         group_files(update, context)
 
-    elif message_text.startswith("/rmgroup"):
+    elif message_text.startswith('/rmgroup'):
         rm_group(update, context)
+
+    elif message_text.startswith('/c_start'):
+        custom_start_command(update, context)
+
+    elif message_text.startswith('/c_stop'):
+        custom_stop_command(update, context)
 
 
 def handle_mention(update, context):
@@ -154,6 +171,12 @@ def handle_mention(update, context):
 
             elif command == '/rmgroup':
                 rm_group(update, context)
+
+            elif command == '/c_start':
+                custom_start_command(update, context)
+
+            elif command == '/c_stop':
+                custom_stop_command(update, context)
 
 
 def cancel(update, context):
@@ -1027,4 +1050,67 @@ def rm_group(update: Update, context: CallbackContext):
         relative_path = os.path.relpath(dest_path, config.MOUNT_POINT)
         update.message.reply_text(f"Ошибка: директория {relative_path} не существует.")
 
+    return ConversationHandler.END
+
+
+def custom_start_command(update, context):
+    global custom_fuse_stopped
+    global custom_mount_point
+    global custom_config_path
+
+    message_text = update.message.text
+    bot_username = context.bot.username
+    pattern = fr'@{bot_username}\s+/c_start\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
+    match = re.search(pattern, message_text)
+    if not match:
+        pattern = r'/c_start\s+(?:"([^"]+)"|(\S+))\s+(?:"([^"]+)"|(\S+))'
+        match = re.search(pattern, message_text)
+
+    if match:
+        mount = match.group(1) or match.group(2)
+        config_in = match.group(3) or match.group(4)
+
+        config_path = os.path.join(config.MOUNT_POINT, config_in.lstrip('/'))
+
+        if mount == config_path:
+            update.message.reply_text(f"Ошибка: Точка монтирования {mount} и путь конфига {config} равны.")
+            return ConversationHandler.END
+
+        if not os.path.exists(config_path):
+            update.message.reply_text(f"Ошибка: Файл конфига {config} не существует.")
+            return ConversationHandler.END
+
+        custom_fuse_thread = threading.Thread(target=partial(custom_start_fuse, mount))
+        custom_fuse_thread.start()
+
+        custom_mount_point = mount
+        custom_config_path = config_path
+        custom_fuse_stopped = False
+
+        update.message.reply_text('Готов принимать команды для работы с кастомной файловой системой.')
+        save_metadata_to_storage(custom_mount_point, CUSTOM_STORAGE_PATH, CUSTOM_BACKUP_FILE)
+
+    return ConversationHandler.END
+
+
+def custom_stop_command(update: Update, context: CallbackContext):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    global custom_fuse_stopped
+    global custom_mount_point
+    global custom_config_path
+
+    user_id = update.message.from_user.id
+    logger.info(f"Stop command received from user_id: {user_id}")
+
+    update.message.reply_text('Останавливаю работу кастомной файловой системы...')
+
+    custom_unmount_fs(custom_mount_point)
+    custom_fuse_stopped = True
+
+    logger.info("Fuse stopped")
+    save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+    custom_mount_point = ''
+    custom_config_path = ''
     return ConversationHandler.END
