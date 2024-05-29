@@ -4,6 +4,7 @@ import tarfile
 import tempfile
 import threading
 import re
+import yaml
 from functools import partial
 
 from telegram import Update, MessageEntity, Bot
@@ -1116,6 +1117,20 @@ def custom_stop_command(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
+def load_rules(yaml_file):
+    with open(yaml_file, 'r') as file:
+        rules = yaml.safe_load(file)
+    return rules
+
+
+def check_file_rules(file_extension, rules):
+    for rule in rules.get('filetypes', []):
+        for ext, actions in rule.items():
+            if ext == file_extension or ext == 'other':
+                return actions
+    return None
+
+
 def custom_save_file_command(update: Update, context: CallbackContext):
     if check_custom_fuse(update) is ConversationHandler.END:
         return ConversationHandler.END
@@ -1175,27 +1190,56 @@ def custom_save_file(update, context):
     if check_custom_fuse(update) is ConversationHandler.END:
         return ConversationHandler.END
 
-    if 'custom_save_user_id' in context.user_data and context.user_data['custom_save_user_id'] == update.message.from_user.id:
+    if ('custom_save_user_id' in context.user_data
+            and context.user_data['custom_save_user_id'] == update.message.from_user.id):
         file_info = None
         filename = None
+        file_extension = None
 
         if update.message.document:
             file_info = update.message.document
             filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
         elif update.message.photo:
             file_info = update.message.photo[-1]
             filename = f"photo_{file_info.file_unique_id}.jpg"
+            file_extension = 'jpg'
         elif update.message.video:
             file_info = update.message.video
             filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
         elif update.message.animation:
             file_info = update.message.animation
             filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
         elif update.message.audio:
             file_info = update.message.audio
             filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
 
+        print(file_info)
+        print(file_extension)
         if file_info:
+            rules = load_rules(custom_config_path)
+            actions = check_file_rules(file_extension, rules)
+
+            print(rules)
+            print(actions)
+
+            if actions:
+                print('in actions')
+                if 'write' in actions:
+                    print('in write')
+                    write_actions = actions.get('write', [])
+                    if isinstance(write_actions, str):
+                        write_actions = [write_actions]
+                    for action in write_actions:
+                        print('in for')
+                        print(action)
+                        if action == 'exit 0':
+                            update.message.reply_text(f"Загрузка файлов с расширением {file_extension} запрещена.")
+                            return ConversationHandler.END
+
             file_id = file_info.file_id
             chat_id = update.message.chat_id
             user_id = update.message.from_user.id
@@ -1231,6 +1275,6 @@ def custom_save_file(update, context):
                     update.message.reply_text(f'Отправьте файл или введите /cancel_save{bot_username} для отмены.')
                 else:
                     update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
-                return context.user_data['save_context']
+                return context.user_data['context_save_context']
     else:
         return context.user_data['custom_save_context']

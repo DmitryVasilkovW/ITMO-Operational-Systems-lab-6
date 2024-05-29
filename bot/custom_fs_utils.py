@@ -13,7 +13,7 @@ def custom_check_mount(custom_mount: str):
 def custom_mount_fs(custom_mount: str):
     global custom_memory_fs
     custom_memory_fs = MemoryFS(CUSTOM_STORAGE_PATH)
-    llfuse.init(custom_memory_fs, custom_mount)
+    llfuse.init(custom_memory_fs, custom_mount, ['nonempty'])
     logger.info(f"File system successfully mounted at {custom_mount}")
     try:
         llfuse.main()
