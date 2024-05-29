@@ -1234,7 +1234,7 @@ def custom_save_file(update, context):
                             update.message.reply_text(f"Загрузка файлов с расширением {file_extension} запрещена.")
                             return ConversationHandler.END
                         elif action != 'pass':
-                            full_command = f"{action}"
+                            full_command = action.format(filename=filename)
                             result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE,
                                                       stderr=subprocess.PIPE, cwd=custom_mount_point)
                             output, error = result.communicate()
