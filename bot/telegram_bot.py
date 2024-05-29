@@ -12,6 +12,8 @@ from bot.converter import create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
+from mutagen.easyid3 import EasyID3
+from mutagen.id3 import error
 
 fuse_stopped = False
 
@@ -22,10 +24,16 @@ def check_fuse(update):
         return ConversationHandler.END
 
 
-def split_and_send_message(update: Update, message: str):
-    max_message_length = 4096
-    for i in range(0, len(message), max_message_length):
-        update.message.reply_text(message[i:i + max_message_length], parse_mode='Markdown')
+def escape_markdown(text: str) -> str:
+    escape_chars = r'\`*_{}[]()#+-.!|>'
+    return ''.join(['\\' + char if char in escape_chars else char for char in text])
+
+
+def split_and_send_message(update, message):
+    MAX_MESSAGE_LENGTH = 4096 - 10
+    escaped_message = escape_markdown(message)
+    for start in range(0, len(escaped_message), MAX_MESSAGE_LENGTH):
+        update.message.reply_text(f"```\n{escaped_message[start:start + MAX_MESSAGE_LENGTH]}\n```", parse_mode='MarkdownV2')
 
 
 def check_mention(update, context) -> bool:
@@ -77,6 +85,9 @@ def handle_private(update, context):
     elif message_text.startswith('/mtime'):
         mtime_command(update, context)
 
+    elif message_text.startswith('/group'):
+        group_files(update, context)
+
 
 def handle_mention(update, context):
     if check_mention(update, context):
@@ -121,6 +132,9 @@ def handle_mention(update, context):
 
             elif command == '/mtime':
                 mtime_command(update, context)
+
+            elif command == '/group':
+                group_files(update, context)
 
 
 def cancel(update, context):
@@ -481,16 +495,21 @@ def cp(update: Update, context: CallbackContext):
 def file_list() -> list[str]:
     files_list = []
 
-    for root, dirs, files in os.walk(MOUNT_POINT):
+    for root, dirs, files in os.walk(MOUNT_POINT, followlinks=True):
         for file in files:
+            file_path = os.path.join(root, file)
             relative_path = os.path.relpath(root, MOUNT_POINT)
-
             if relative_path == '.':
                 relative_path = '/'
             else:
                 relative_path = f"/{relative_path}"
-
-            files_list.append(f"<{relative_path}> {file}")
+            if os.path.islink(file_path):
+                target_path = os.readlink(file_path)
+                if not os.path.isabs(target_path):
+                    target_path = os.path.join(os.path.dirname(file_path), target_path)
+                files_list.append(f"<{relative_path}> {file} -> {target_path}")
+            else:
+                files_list.append(f"<{relative_path}> {file}")
     return files_list
 
 
@@ -502,7 +521,7 @@ def tree(directory: str, prefix: str = '') -> str:
 
     for pointer, path in zip(pointers, contents):
         full_path = os.path.join(directory, path)
-        if os.path.isdir(full_path):
+        if os.path.isdir(full_path) and not os.path.islink(full_path):
             result.append(f"{prefix}{pointer}{path}/")
             if pointer == '└── ':
                 extension = '    '
@@ -510,7 +529,13 @@ def tree(directory: str, prefix: str = '') -> str:
                 extension = '│   '
             result.append(tree(full_path, prefix=prefix + extension))
         else:
-            result.append(f"{prefix}{pointer}{path}")
+            if os.path.islink(full_path):
+                target_path = os.readlink(full_path)
+                if not os.path.isabs(target_path):
+                    target_path = os.path.join(os.path.dirname(full_path), target_path)
+                result.append(f"{prefix}{pointer}{path} -> {target_path}")
+            else:
+                result.append(f"{prefix}{pointer}{path}")
     return '\n'.join(result)
 
 
@@ -546,11 +571,11 @@ def list_files(update, context):
 
     filtered_files = [file for file in files_list if file.startswith(f"<{directory_path}")]
 
-    if files_list:
-        files_output = f"```\n{'\n'.join(filtered_files)}```"
+    if filtered_files:
+        files_output = '\n'.join(filtered_files)
         message = files_output
     else:
-        message = f"Директория {filtered_files} и все поддиректории пусты."
+        message = f"Директория {directory_path} и все поддиректории пусты."
 
     split_and_send_message(update, message)
     return ConversationHandler.END
@@ -572,18 +597,17 @@ def tree_list_files(update, context):
         if list_path_check(update, directory_path) is ConversationHandler.END:
             return ConversationHandler.END
 
-    files_list = file_list()
-    filtered_files = [file for file in files_list if file.startswith(f"<{directory_path}")]
-
-    if filtered_files:
-        tree_output = tree(os.path.join(MOUNT_POINT, directory_path.strip('/')))
-        tree_lines = [line for line in tree_output.split('\n') if line.strip()]
-        message = f"```\n{'\n'.join(tree_lines)}\n```"
+    tree_output = tree(os.path.join(MOUNT_POINT, directory_path.strip('/')))
+    tree_lines = [line for line in tree_output.split('\n') if line.strip()]
+    if tree_lines:
+        message = '\n'.join(tree_lines)
     else:
         message = f"Директория {directory_path} и все поддиректории пусты."
 
     split_and_send_message(update, message)
     return ConversationHandler.END
+
+
 
 
 def remove_file(update, context, target_path):
@@ -891,3 +915,80 @@ def convert_command(update: Update, context: CallbackContext):
         update.message.reply_text("Ошибка: неправильный формат команды. Используйте /convert <путь>.")
 
     return ConversationHandler.END
+
+
+def group_mp3_files(src_directory, dest_directory):
+    for root, _, files in os.walk(src_directory):
+        for file in files:
+            if file.endswith('.mp3'):
+                file_path = os.path.join(root, file)
+                try:
+                    audio = EasyID3(file_path)
+                    artist = audio.get('artist', ['no_artist'])[0]
+                    genre = audio.get('genre', ['no_genre'])[0]
+                    year = audio.get('date', ['no_year'])[0].split('-')[0]
+                except error:
+                    artist, genre, year = 'no_artist', 'no_genre', 'no_year'
+
+                artist_path = os.path.join(dest_directory, 'Artist', artist)
+                genre_path = os.path.join(dest_directory, 'Genre', genre)
+                year_path = os.path.join(dest_directory, 'Year', year)
+
+                os.makedirs(artist_path, exist_ok=True)
+                os.makedirs(genre_path, exist_ok=True)
+                os.makedirs(year_path, exist_ok=True)
+
+                create_symlink(file_path, artist_path)
+                create_symlink(file_path, genre_path)
+                create_symlink(file_path, year_path)
+
+
+def create_symlink(src, dest):
+    try:
+        symlink_path = os.path.join(dest, os.path.basename(src))
+        if not os.path.exists(symlink_path):
+            os.symlink(src, symlink_path)
+    except Exception as e:
+        logger.error(f"Ошибка при создании ссылки для {src} в {dest}: {e}")
+
+
+def group_files(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    bot_username = context.bot.username
+    pattern = fr'@{bot_username}\s+/group\s+(?:"([^"]+)"|(\S+))'
+    match = re.search(pattern, message_text)
+    if not match:
+        pattern = r'/group\s+(?:"([^"]+)"|(\S+))'
+        match = re.search(pattern, message_text)
+
+    if match:
+        src_directory = match.group(1) or match.group(2)
+        src_directory = src_directory.lstrip('/')
+
+        src_path = os.path.join(MOUNT_POINT, src_directory)
+        dest_path = os.path.join(MOUNT_POINT, 'grouped_mp3')
+
+        if not os.path.exists(src_path) and not os.path.exists('/' + src_directory):
+            update.message.reply_text(f"Ошибка: директория {src_directory} не существует.")
+            return ConversationHandler.END
+        elif os.path.exists('/' + src_directory):
+            src_path = '/' + src_directory
+        else:
+            update.message.reply_text(f"Ошибка: директория {src_directory} не существует.")
+            return ConversationHandler.END
+
+        try:
+            group_mp3_files(src_path, dest_path)
+            update.message.reply_text(f"Файлы из {src_directory} успешно сгруппированы в {dest_path}.")
+            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+        except Exception as e:
+            logger.error(f"Ошибка при группировке файлов из {src_directory}: {e}")
+            update.message.reply_text(f"Ошибка при группировке файлов.")
+    else:
+        update.message.reply_text("Ошибка: неправильный формат команды. Используйте /group <директория>.")
+
+    return ConversationHandler.END
+

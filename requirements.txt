@@ -3,3 +3,4 @@ python-telegram-bot==13.7
 python-dotenv==1.0.1
 llfuse==1.5.0
 pillow==10.3.0
+mutagen~=1.47.0
