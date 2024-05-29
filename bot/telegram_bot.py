@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import threading
@@ -120,6 +121,9 @@ def handle_private(update, context):
 
     elif message_text.startswith('/c_stop'):
         custom_stop_command(update, context)
+
+    elif message_text.startswith('/c_ls'):
+        custom_list_files(update, context)
 
 
 def handle_mention(update, context):
@@ -1113,4 +1117,63 @@ def custom_stop_command(update: Update, context: CallbackContext):
     save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
     custom_mount_point = ''
     custom_config_path = ''
+    return ConversationHandler.END
+
+
+def custom_list_files(update, context):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    directory_path = custom_mount_point
+    match = re.search(r'/c_ls\s+(?:"([^"]+)"|(\S+))', update.message.text)
+
+    if match:
+        directory_path = match.group(1) or match.group(2)
+        if directory_path is None:
+            update.message.reply_text("Ошибка: используйте /c_ls")
+            return ConversationHandler.END
+
+        if list_path_check(update, directory_path) is ConversationHandler.END:
+            return ConversationHandler.END
+
+    commands = ["echo \"Total files $(find . -name '1.txt' -type f | wc -l)\"", "pass"] # метод для получения команд из конфига
+
+    outputs = []
+    rest_lines = []
+
+    try:
+        for command in commands:
+            if command != "pass":
+                full_command = f"{command}"
+                result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=directory_path)
+                output, error = result.communicate()
+                outputs.append(output.decode())
+                if error:
+                    update.message.reply_text(f"Ошибка при выполнении команды: {error.decode()}")
+                    return ConversationHandler.END
+            else:
+                try:
+                    command = "ls -l"
+                    result = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                              cwd=directory_path)
+                    output, error = result.communicate()
+                    ls_output = output.decode().strip()
+                    ls_outputs = ls_output.split('\n')
+                    rest_lines = ls_outputs[1:]
+                    if error:
+                        update.message.reply_text(f"Ошибка при выполнении команды: {error.decode()}")
+                        return ConversationHandler.END
+                except Exception as e:
+                    update.message.reply_text(f"Произошла ошибка при выполнении команды: {str(e)}")
+                    return ConversationHandler.END
+    except Exception as e:
+        update.message.reply_text(f"Произошла ошибка при выполнении команды: {str(e)}")
+        return ConversationHandler.END
+
+    for output in outputs:
+        update.message.reply_text(output)
+
+    for line in rest_lines:
+        update.message.reply_text(line)
+
     return ConversationHandler.END
