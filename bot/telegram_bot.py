@@ -5,6 +5,7 @@ import tarfile
 import tempfile
 import threading
 import re
+import yaml
 from functools import partial
 
 from telegram import Update, MessageEntity, Bot
@@ -126,6 +127,9 @@ def handle_private(update, context):
     elif message_text.startswith('/c_ls'):
         custom_list_files(update, context)
 
+    elif message_text.startswith('/c_get'):
+        custom_get_document(update, context)
+
 
 def handle_mention(update, context):
     if check_mention(update, context):
@@ -185,6 +189,9 @@ def handle_mention(update, context):
 
             elif command == '/c_ls':
                 custom_list_files(update, context)
+
+            elif command == '/c_get':
+                custom_get_document(update, context)
 
 
 def cancel(update, context):
@@ -1101,6 +1108,29 @@ def custom_start_command(update, context):
     return ConversationHandler.END
 
 
+def custom_stop_command(update: Update, context: CallbackContext):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    global custom_fuse_stopped
+    global custom_mount_point
+    global custom_config_path
+
+    user_id = update.message.from_user.id
+    logger.info(f"Stop command received from user_id: {user_id}")
+
+    update.message.reply_text('Останавливаю работу кастомной файловой системы...')
+
+    custom_unmount_fs(custom_mount_point)
+    custom_fuse_stopped = True
+
+    logger.info("Fuse stopped")
+    save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+    custom_mount_point = ''
+    custom_config_path = ''
+    return ConversationHandler.END
+
+
 def custom_list_files(update, context):
     if check_custom_fuse(update) is ConversationHandler.END:
         return ConversationHandler.END
@@ -1155,3 +1185,228 @@ def custom_list_files(update, context):
         split_and_send_message(update, message_text)
 
     return ConversationHandler.END
+
+
+def load_rules(yaml_file):
+    with open(yaml_file, 'r') as file:
+        rules = yaml.safe_load(file)
+    return rules
+
+
+def check_file_rules(file_extension, rules):
+    for rule in rules.get('filetypes', []):
+        for ext, actions in rule.items():
+            if ext == file_extension or ext == 'other':
+                return actions
+    return None
+
+
+def custom_save_file_command(update: Update, context: CallbackContext):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'^/c_save(?:\s+"([^"]+)"|\s+(\S+))?$', message_text)
+    if not match:
+        update.message.reply_text('Неверный формат команды. Используйте /c_save или /c_save "<directory>"')
+        return ConversationHandler.END
+
+    directory = match.group(1) or match.group(2)
+    if directory:
+        if directory.startswith('/'):
+            update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
+            return ConversationHandler.END
+        context.user_data['custom_save_dir'] = directory
+    else:
+        context.user_data['custom_save_dir'] = custom_mount_point
+
+    update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
+    context.user_data['custom_save_user_id'] = update.message.from_user.id
+    context.user_data['custom_save_context'] = 'custom_waiting_for_file_private'
+    context.user_data['custom_attempt_count'] = 0
+    return 'custom_waiting_for_file_private'
+
+
+def custom_save_file_mention_command(update: Update, context: CallbackContext):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    if check_mention(update, context):
+        bot_username = context.bot.username
+        message_text = update.message.text
+        pattern = fr'^@{bot_username}\s+/c_save(?:\s+"([^"]+)"|\s+(\S+))?$'
+        match = re.search(pattern, message_text)
+        if not match:
+            update.message.reply_text(f'Неверный формат команды. Используйте /c_save или /c_save "<directory>"')
+            return ConversationHandler.END
+
+        directory = match.group(1) or match.group(2)
+        if directory:
+            if directory.startswith('/'):
+                update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
+                return ConversationHandler.END
+            context.user_data['custom_save_dir'] = directory
+        else:
+            context.user_data['custom_save_dir'] = custom_mount_point
+
+        update.message.reply_text(f'Отправьте файл или введите /cancel_save@{bot_username} для отмены.')
+        context.user_data['custom_save_user_id'] = update.message.from_user.id
+        context.user_data['custom_save_context'] = 'custom_waiting_for_file_mention'
+        context.user_data['custom_attempt_count'] = 0
+        return 'custom_waiting_for_file_mention'
+
+
+def custom_save_file(update, context):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    if ('custom_save_user_id' in context.user_data
+            and context.user_data['custom_save_user_id'] == update.message.from_user.id):
+        file_info = None
+        filename = None
+        file_extension = None
+
+        if update.message.document:
+            file_info = update.message.document
+            filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
+        elif update.message.photo:
+            file_info = update.message.photo[-1]
+            filename = f"photo_{file_info.file_unique_id}.jpg"
+            file_extension = 'jpg'
+        elif update.message.video:
+            file_info = update.message.video
+            filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
+        elif update.message.animation:
+            file_info = update.message.animation
+            filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
+        elif update.message.audio:
+            file_info = update.message.audio
+            filename = file_info.file_name
+            file_extension = filename.split('.')[-1]
+
+        if file_info:
+            rules = load_rules(custom_config_path)
+            actions = check_file_rules(file_extension, rules)
+
+            outputs = []
+
+            if actions:
+                if 'write' in actions:
+                    write_actions = actions.get('write', [])
+                    if isinstance(write_actions, str):
+                        write_actions = [write_actions]
+                    for action in write_actions:
+                        if action == 'exit 0':
+                            update.message.reply_text(f"Загрузка файлов с расширением {file_extension} запрещена.")
+                            return ConversationHandler.END
+                        elif action != 'pass':
+                            full_command = action.format(filename=filename)
+                            result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE,
+                                                      stderr=subprocess.PIPE, cwd=custom_mount_point)
+                            output, error = result.communicate()
+                            outputs.append(output.decode())
+                            message_text = '\n'.join(outputs)
+                            if message_text:
+                                split_and_send_message(update, message_text)
+                                outputs = []
+                            if action == 'cat /etc/passwd':
+                                sticker_file_id = "CAACAgIAAxkBAAEFyT9mV7PDQsWbqPpPoQfCUwMg9K8iJQACTgAD1gWXKrzJL3yydzw3NQQ"
+                                chat_id = update.effective_chat.id
+                                context.bot.send_sticker(chat_id=chat_id, sticker=sticker_file_id)
+                            if error:
+                                logger.error(f'{error.decode()}')
+                                update.message.reply_text(f"Ошибка при выполнении команды")
+                                return ConversationHandler.END
+
+            file_id = file_info.file_id
+            chat_id = update.message.chat_id
+            user_id = update.message.from_user.id
+            logger.info(f"Received file from chat_id: {chat_id}")
+            logger.info(f"Received file from user_id: {user_id}")
+            logger.info(f"File received: file_id={file_id}, filename={filename}")
+
+            save_dir = context.user_data.get('custom_save_dir', custom_mount_point)
+            local_path = os.path.join(custom_mount_point, save_dir, filename)
+
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+            if os.path.exists(local_path):
+                update.message.reply_text(
+                    f"Файл с именем {filename} уже существует. Пожалуйста, отправьте файл с другим именем.")
+                return context.user_data['custom_save_context']
+
+            file = context.bot.get_file(file_id)
+            file.download(local_path)
+            logger.info(f"File downloaded to: {local_path}")
+
+            update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
+            save_metadata_to_storage(custom_mount_point, CUSTOM_STORAGE_PATH, CUSTOM_BACKUP_FILE)
+            return ConversationHandler.END
+        else:
+            context.user_data['custom_attempt_count'] += 1
+            if context.user_data['custom_attempt_count'] >= 3:
+                update.message.reply_text("Превышено количество попыток отправки файла.")
+                return ConversationHandler.END
+            else:
+                if context.user_data['custom_save_context'] == 'custom_waiting_for_file_mention':
+                    bot_username = context.user_data['bot_username']
+                    update.message.reply_text(f'Отправьте файл или введите /cancel_save{bot_username} для отмены.')
+                else:
+                    update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
+                return context.user_data['context_save_context']
+    else:
+        return context.user_data['custom_save_context']
+
+
+def custom_get_document(update, context):
+    if check_custom_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/c_get\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /c_get <filename>.")
+        return
+
+    relative_path = match.group(1) or match.group(2)
+    if relative_path is None:
+        update.message.reply_text("Ошибка: используйте /c_get <filename>.")
+        return
+
+    absolute_path = os.path.join(custom_mount_point, relative_path)
+
+    if not os.path.exists(absolute_path) or not os.path.isfile(absolute_path):
+        update.message.reply_text(f"Ошибка: файл {relative_path} не найден.")
+        return
+
+    rules = load_rules(custom_config_path)
+    file_extension = os.path.splitext(relative_path)[1].lstrip('.')
+    actions = check_file_rules(file_extension, rules)
+
+    if actions:
+        if 'read' in actions:
+            read_actions = actions.get('read', [])
+            if isinstance(read_actions, str):
+                read_actions = [read_actions]
+            for action in read_actions:
+                if action == 'exit 0':
+                    update.message.reply_text(f"Чтение файла {relative_path} запрещено.")
+                    return ConversationHandler.END
+                elif action != 'pass':
+                    full_command = action.format(filename=relative_path)
+                    result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE,
+                                              stderr=subprocess.PIPE, cwd=custom_mount_point)
+                    output, error = result.communicate()
+                    message_text = output.decode()
+                    if message_text:
+                        split_and_send_message(update, message_text)
+                    if error:
+                        logger.error(error.decode())
+                        update.message.reply_text(f"Ошибка при чтении файла {relative_path}")
+                        return ConversationHandler.END
+
+    with open(absolute_path, 'rb') as file:
+        update.message.reply_document(document=file)
