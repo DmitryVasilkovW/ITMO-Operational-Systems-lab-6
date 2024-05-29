@@ -8,9 +8,10 @@ import re
 from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
+import config
 from bot.converter import create_empty_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
-from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
+from config import logger, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import error
@@ -177,7 +178,7 @@ def save_file_command(update: Update, context: CallbackContext):
             return ConversationHandler.END
         context.user_data['save_dir'] = directory
     else:
-        context.user_data['save_dir'] = MOUNT_POINT
+        context.user_data['save_dir'] = config.MOUNT_POINT
 
     update.message.reply_text('Отправьте файл или введите /cancel_save для отмены.')
     context.user_data['save_user_id'] = update.message.from_user.id
@@ -206,7 +207,7 @@ def save_file_mention_command(update: Update, context: CallbackContext):
                 return ConversationHandler.END
             context.user_data['save_dir'] = directory
         else:
-            context.user_data['save_dir'] = MOUNT_POINT
+            context.user_data['save_dir'] = config.MOUNT_POINT
 
         update.message.reply_text(f'Отправьте файл или введите /cancel_save@{bot_username} для отмены.')
         context.user_data['save_user_id'] = update.message.from_user.id
@@ -247,8 +248,8 @@ def save_file(update, context):
             logger.info(f"Received file from user_id: {user_id}")
             logger.info(f"File received: file_id={file_id}, filename={filename}")
 
-            save_dir = context.user_data.get('save_dir', MOUNT_POINT)
-            local_path = os.path.join(MOUNT_POINT, save_dir, filename)
+            save_dir = context.user_data.get('save_dir', config.MOUNT_POINT)
+            local_path = os.path.join(config.MOUNT_POINT, save_dir, filename)
 
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
@@ -262,7 +263,7 @@ def save_file(update, context):
             logger.info(f"File downloaded to: {local_path}")
 
             update.message.reply_text(f"Файл {filename} загружен и сохранен на вашем сервере.")
-            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
             return ConversationHandler.END
         else:
             context.user_data['attempt_count'] += 1
@@ -295,7 +296,7 @@ def get_document(update, context):
         update.message.reply_text("Ошибка: используйте /get <filename>.")
         return
 
-    absolute_path = os.path.join(MOUNT_POINT, relative_path)
+    absolute_path = os.path.join(config.MOUNT_POINT, relative_path)
 
     if not os.path.exists(absolute_path) or not os.path.isfile(absolute_path):
         update.message.reply_text(f"Ошибка: файл {relative_path} не найден.")
@@ -320,7 +321,7 @@ def get_directory(update, context):
         update.message.reply_text("Ошибка: используйте /getdir <directory>.")
         return
 
-    absolute_path = os.path.join(MOUNT_POINT, relative_path)
+    absolute_path = os.path.join(config.MOUNT_POINT, relative_path)
 
     if not os.path.exists(absolute_path) or not os.path.isdir(absolute_path):
         update.message.reply_text(f"Ошибка: директория {relative_path} не найдена.")
@@ -364,7 +365,7 @@ def mkdir(update: Update, context: CallbackContext):
             update.message.reply_text("Ошибка: имя директории не должно начинаться с `/`.")
             return ConversationHandler.END
 
-        new_dir_path = os.path.join(MOUNT_POINT, directory_name)
+        new_dir_path = os.path.join(config.MOUNT_POINT, directory_name)
 
         if os.path.exists(new_dir_path):
             update.message.reply_text(f"Ошибка: директория {directory_name} уже существует.")
@@ -377,7 +378,7 @@ def mkdir(update: Update, context: CallbackContext):
             user_id = update.message.from_user.id
             logger.info(
                 f"Directory {directory_name} created successfully at {new_dir_path} from chat_id {chat_id} and user_id {user_id}.")
-            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
             logger.error(f"Ошибка при создании директории {directory_name}: {e}")
             update.message.reply_text(f"Ошибка при создании директории.")
@@ -404,8 +405,8 @@ def move(update: Update, context: CallbackContext):
         source = match.group(1) or match.group(2)
         destination = match.group(3) or match.group(4)
 
-        source_path = os.path.join(MOUNT_POINT, source.lstrip('/'))
-        destination_path = os.path.join(MOUNT_POINT, destination.lstrip('/'))
+        source_path = os.path.join(config.MOUNT_POINT, source.lstrip('/'))
+        destination_path = os.path.join(config.MOUNT_POINT, destination.lstrip('/'))
 
         if source_path == destination_path:
             update.message.reply_text(f"Ошибка: Исходный путь {source} и путь назначения {destination} равны.")
@@ -426,7 +427,7 @@ def move(update: Update, context: CallbackContext):
             chat_id = update.message.chat_id
             user_id = update.message.from_user.id
             logger.info(f"{source} перемещен(а) в {destination} от chat_id {chat_id} и user_id {user_id}.")
-            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
             logger.error(f"Ошибка при перемещении {source} в {destination}: {e}")
             update.message.reply_text(f"Ошибка при перемещении")
@@ -481,8 +482,8 @@ def cp(update: Update, context: CallbackContext):
             src = src.lstrip('/')
             dst = dst.lstrip('/')
 
-            src_path = os.path.join(MOUNT_POINT, src)
-            dst_path = os.path.join(MOUNT_POINT, dst)
+            src_path = os.path.join(config.MOUNT_POINT, src)
+            dst_path = os.path.join(config.MOUNT_POINT, dst)
 
             if not os.path.exists(src_path):
                 update.message.reply_text(f"Ошибка: исходный путь {src} не существует.")
@@ -490,13 +491,13 @@ def cp(update: Update, context: CallbackContext):
 
             try:
                 new_dst_path = copy_path_with_suffix(src_path, dst_path)
-                relative_new_dst_path = os.path.relpath(new_dst_path, MOUNT_POINT)
+                relative_new_dst_path = os.path.relpath(new_dst_path, config.MOUNT_POINT)
                 update.message.reply_text(f"{src} успешно скопирован в {relative_new_dst_path}.")
                 chat_id = update.message.chat_id
                 user_id = update.message.from_user.id
                 logger.info(
                     f"Path {src} copied to {relative_new_dst_path} from chat_id {chat_id} and user_id {user_id}.")
-                save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+                save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
             except Exception as e:
                 logger.error(f"Error copying {src} to {dst}: {e}")
                 update.message.reply_text(f"Ошибка при копировании {src} в {dst}.")
@@ -513,10 +514,10 @@ def cp(update: Update, context: CallbackContext):
 def file_list() -> list[str]:
     files_list = []
 
-    for root, dirs, files in os.walk(MOUNT_POINT, followlinks=True):
+    for root, dirs, files in os.walk(config.MOUNT_POINT, followlinks=True):
         for file in files:
             file_path = os.path.join(root, file)
-            relative_path = os.path.relpath(root, MOUNT_POINT)
+            relative_path = os.path.relpath(root, config.MOUNT_POINT)
             if relative_path == '.':
                 relative_path = '/'
             else:
@@ -556,7 +557,7 @@ def list_path_check(update, directory_path):
         update.message.reply_text("Ошибка: имя директории должно начинаться с `/`.")
         return ConversationHandler.END
 
-    check_dir_path = os.path.join(MOUNT_POINT, directory_path[1:])
+    check_dir_path = os.path.join(config.MOUNT_POINT, directory_path[1:])
 
     if not os.path.exists(check_dir_path):
         update.message.reply_text(f"Ошибка: директории {directory_path} не существует")
@@ -609,7 +610,7 @@ def tree_list_files(update, context):
         if list_path_check(update, directory_path) is ConversationHandler.END:
             return ConversationHandler.END
 
-    tree_output = tree(os.path.join(MOUNT_POINT, directory_path.strip('/')))
+    tree_output = tree(os.path.join(config.MOUNT_POINT, directory_path.strip('/')))
     tree_lines = [line for line in tree_output.split('\n') if line.strip()]
     if tree_lines:
         message = '\n'.join(tree_lines)
@@ -625,7 +626,7 @@ def remove_file(update, context, target_path):
         update.message.reply_text("Ошибка: путь не должен начинаться с `/`.")
         return ConversationHandler.END
 
-    full_path = os.path.join(MOUNT_POINT, target_path)
+    full_path = os.path.join(config.MOUNT_POINT, target_path)
 
     if not os.path.exists(full_path):
         update.message.reply_text(f"Ошибка: путь {target_path} не существует.")
@@ -642,7 +643,7 @@ def remove_file(update, context, target_path):
         chat_id = update.message.chat_id
         user_id = update.message.from_user.id
         logger.info(f"{target_path} удален(а) от chat_id {chat_id} и user_id {user_id}.")
-        save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+        save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
     except Exception as e:
         logger.error(f"Ошибка при удалении {target_path}: {e}")
         update.message.reply_text(f"Ошибка при удалении {target_path}.")
@@ -713,7 +714,7 @@ def start_command(update: Update, context: CallbackContext):
     fuse_stopped = False
 
     update.message.reply_text('Готов принимать команды для работы с файловой системой.')
-    save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+    save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
     return ConversationHandler.END
 
 
@@ -732,7 +733,7 @@ def stop_command(update: Update, context: CallbackContext):
     fuse_stopped = True
 
     logger.info("Fuse stopped")
-    save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+    save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
     return ConversationHandler.END
 
 
@@ -798,7 +799,7 @@ def process_overwrites(update: Update, context: CallbackContext):
     for i, (filename, conflicting_filename, message) in enumerate(conflicting_files):
         if overwrite_confirmation[i]:
             source_path = os.path.join(path, filename)
-            destination_path = os.path.join(MOUNT_POINT, conflicting_filename)
+            destination_path = os.path.join(config.MOUNT_POINT, conflicting_filename)
 
             if os.path.exists(destination_path):
                 os.remove(destination_path)
@@ -806,7 +807,7 @@ def process_overwrites(update: Update, context: CallbackContext):
             if filename.endswith(".png"):
                 output_filename_jpg = filename[:-4] + '.jpg'
                 overwritten_files.append(f"{filename} -> {output_filename_jpg}")
-                output_path_png = os.path.join(MOUNT_POINT, filename)
+                output_path_png = os.path.join(config.MOUNT_POINT, filename)
 
                 shutil.copy(source_path, output_path_png)
                 create_empty_jpg(output_path_png)
@@ -814,7 +815,7 @@ def process_overwrites(update: Update, context: CallbackContext):
             elif filename.endswith(".jpg"):
                 output_filename_png = filename[:-4] + '.png'
                 output_filename_jpg = filename[:-4] + '.jpg'
-                output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
+                output_path_png = os.path.join(config.MOUNT_POINT, output_filename_png)
                 overwritten_files.append(f"{filename} -> {output_filename_jpg}")
 
                 shutil.copy(source_path, output_path_png)
@@ -849,8 +850,8 @@ def convert_command(update: Update, context: CallbackContext):
 
                 if filename.endswith(".png"):
                     output_filename_jpg = filename[:-4] + '.jpg'
-                    output_path_jpg = os.path.join(MOUNT_POINT, output_filename_jpg)
-                    output_path_png = os.path.join(MOUNT_POINT, filename)
+                    output_path_jpg = os.path.join(config.MOUNT_POINT, output_filename_jpg)
+                    output_path_png = os.path.join(config.MOUNT_POINT, filename)
 
                     if os.path.exists(output_path_jpg) and os.path.exists(output_path_png):
                         existing_files.append(f"{filename} - PNG и JPG файлы уже существуют")
@@ -865,8 +866,8 @@ def convert_command(update: Update, context: CallbackContext):
 
                 elif filename.endswith(".jpg"):
                     output_filename_png = filename[:-4] + '.png'
-                    output_path_png = os.path.join(MOUNT_POINT, output_filename_png)
-                    output_path_jpg = os.path.join(MOUNT_POINT, filename)
+                    output_path_png = os.path.join(config.MOUNT_POINT, output_filename_png)
+                    output_path_jpg = os.path.join(config.MOUNT_POINT, filename)
 
                     if os.path.exists(output_path_png) and os.path.exists(output_path_jpg):
                         existing_files.append(f"{filename} - JPG и PNG файлы уже существуют")
@@ -879,7 +880,7 @@ def convert_command(update: Update, context: CallbackContext):
                         converted_files.append(f"{filename} -> {output_filename_png}")
 
                 else:
-                    output_path = os.path.join(MOUNT_POINT, filename)
+                    output_path = os.path.join(config.MOUNT_POINT, filename)
                     shutil.copy(source_path, output_path)
                     moved_files.append(filename)
 
@@ -914,7 +915,7 @@ def convert_command(update: Update, context: CallbackContext):
 
             chat_id = update.message.chat_id
             user_id = update.message.from_user.id
-            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
 
             logger.info(
                 f"Files in directory {path} processed successfully from chat_id {chat_id} and user_id {user_id}.")
@@ -978,8 +979,8 @@ def group_files(update: Update, context: CallbackContext):
         src_directory = match.group(1) or match.group(2)
         src_directory = src_directory.lstrip('/')
 
-        src_path = os.path.join(MOUNT_POINT, src_directory)
-        dest_path = os.path.join(MOUNT_POINT, 'grouped_mp3')
+        src_path = os.path.join(config.MOUNT_POINT, src_directory)
+        dest_path = os.path.join(config.MOUNT_POINT, 'grouped_mp3')
 
         if not os.path.exists(src_path) and not os.path.exists('/' + src_directory):
             update.message.reply_text(f"Ошибка: директория {src_directory} не существует.")
@@ -993,7 +994,7 @@ def group_files(update: Update, context: CallbackContext):
         try:
             group_mp3_files(src_path, dest_path)
             update.message.reply_text(f"Файлы из {src_directory} успешно сгруппированы в {dest_path}.")
-            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
             logger.error(f"Ошибка при группировке файлов из {src_directory}: {e}")
             update.message.reply_text(f"Ошибка при группировке файлов.")
@@ -1011,19 +1012,19 @@ def rm_group(update: Update, context: CallbackContext):
         update.message.reply_text("Ошибка: используйте /rmgroup без аргументов")
         return ConversationHandler.END
 
-    dest_path = os.path.join(MOUNT_POINT, 'grouped_mp3')
+    dest_path = os.path.join(config.MOUNT_POINT, 'grouped_mp3')
 
     if os.path.exists(dest_path):
         try:
             shutil.rmtree(dest_path)
-            relative_path = os.path.relpath(dest_path, MOUNT_POINT)
+            relative_path = os.path.relpath(dest_path, config.MOUNT_POINT)
             update.message.reply_text(f"Директория {relative_path} успешно удалена.")
-            save_metadata_to_storage(MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
+            save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
             logger.error(f"Ошибка при удалении директории {dest_path}: {e}")
             update.message.reply_text("Ошибка при удалении директории.")
     else:
-        relative_path = os.path.relpath(dest_path, MOUNT_POINT)
+        relative_path = os.path.relpath(dest_path, config.MOUNT_POINT)
         update.message.reply_text(f"Ошибка: директория {relative_path} не существует.")
 
     return ConversationHandler.END
