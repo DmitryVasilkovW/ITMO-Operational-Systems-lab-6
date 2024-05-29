@@ -6,12 +6,12 @@ import threading
 import re
 
 from telegram import Update, MessageEntity, Bot
-from telegram.ext import CallbackContext, ConversationHandler, MessageHandler, Filters
+from telegram.ext import CallbackContext, ConversationHandler
 
 import config
-from bot.converter import create_empty_jpg
+from bot.converter import create_empty_jpg, convert_png_to_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
-from config import logger, MOUNT_POINT, TOKEN, STORAGE_PATH, BACKUP_FILE
+from config import logger, TOKEN, STORAGE_PATH, BACKUP_FILE
 from fs_utils import unmount_fs, start_fuse
 
 fuse_stopped = False
@@ -78,7 +78,7 @@ def handle_private(update, context):
     elif message_text.startswith('/mtime'):
         mtime_command(update, context)
 
-    elif message_text.startswith('/setmount'):
+    elif message_text.startswith('/cd'):
         set_mount_dir(update, context)
 
     elif message_text.startswith('/returnmount'):
@@ -129,7 +129,7 @@ def handle_mention(update, context):
             elif command == '/mtime':
                 mtime_command(update, context)
 
-            elif command =='/setmount':
+            elif command =='/cd':
                 set_mount_dir(update, context)
 
             elif command =='/returnmount':
@@ -281,6 +281,16 @@ def get_document(update, context):
     if not os.path.exists(absolute_path) or not os.path.isfile(absolute_path):
         update.message.reply_text(f"Ошибка: файл {relative_path} не найден.")
         return
+
+    if absolute_path.endswith('.jpg'):
+        png_path = absolute_path[:-3] + 'png'
+        if os.path.exists(png_path) and os.path.isfile(png_path):
+            convert_png_to_jpg(png_path)
+            jpg_path = png_path[:-3] + 'jpg'
+            with open(jpg_path, 'rb') as file:
+                update.message.reply_document(document=file)
+            os.remove(jpg_path)
+            return
 
     with open(absolute_path, 'rb') as file:
         update.message.reply_document(document=file)
