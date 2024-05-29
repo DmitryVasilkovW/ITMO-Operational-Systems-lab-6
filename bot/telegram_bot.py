@@ -993,7 +993,7 @@ def group_files(update: Update, context: CallbackContext):
 
         try:
             group_mp3_files(src_path, dest_path)
-            update.message.reply_text(f"Файлы из {src_directory} успешно сгруппированы в {dest_path}.")
+            update.message.reply_text(f"Файлы из {src_directory} успешно сгруппированы в grouped_mp3.")
             save_metadata_to_storage(config.MOUNT_POINT, STORAGE_PATH, BACKUP_FILE)
         except Exception as e:
             logger.error(f"Ошибка при группировке файлов из {src_directory}: {e}")
