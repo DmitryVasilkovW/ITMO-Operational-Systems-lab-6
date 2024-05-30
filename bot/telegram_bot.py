@@ -111,73 +111,35 @@ def check_mention(update, context) -> bool:
 
 
 def handle_private(update, context):
-    message_text = update.message.text
+    message_text = update.message.text.split()[0]
+    command_mapping = {
+        '/stop': stop_command,
+        '/start': start_command,
+        '/mkdir': mkdir,
+        '/mv': move,
+        '/ls': list_files,
+        '/trls': tree_list_files,
+        '/rm': remove,
+        '/cp': cp,
+        '/get': get_document,
+        '/getdir': get_directory,
+        '/ctime': ctime_command,
+        '/mtime': mtime_command,
+        '/cd': set_mount_dir,
+        '/returnmount': revert_mount_dir,
+        '/archget': get_archive,
+        '/group': group_files,
+        '/ungroup': rm_group,
+        '/c_start': custom_start_command,
+        '/c_stop': custom_stop_command,
+        '/c_ls': custom_list_files,
+        '/c_get': custom_get_document,
+        '/help': help_command
+    }
 
-    if message_text.startswith('/stop'):
-        stop_command(update, context)
-
-    elif message_text.startswith('/start'):
-        start_command(update, context)
-
-    elif message_text.startswith('/mkdir'):
-        mkdir(update, context)
-
-    elif message_text.startswith('/mv'):
-        move(update, context)
-
-    elif message_text.startswith('/ls'):
-        list_files(update, context)
-
-    elif message_text.startswith('/trls'):
-        tree_list_files(update, context)
-
-    elif message_text.startswith('/rm'):
-        remove(update, context)
-
-    elif message_text.startswith('/cp'):
-        cp(update, context)
-
-    elif message_text.startswith('/get'):
-        get_document(update, context)
-
-    elif message_text.startswith('/getdir'):
-        get_directory(update, context)
-
-    elif message_text.startswith('/ctime'):
-        ctime_command(update, context)
-
-    elif message_text.startswith('/mtime'):
-        mtime_command(update, context)
-
-    elif message_text.startswith('/cd'):
-        set_mount_dir(update, context)
-
-    elif message_text.startswith('/returnmount'):
-        revert_mount_dir(update, context)
-
-    elif message_text.startswith('/archget'):
-        get_archive(update, context)
-
-    elif message_text.startswith('/group'):
-        group_files(update, context)
-
-    elif message_text.startswith('/ungroup'):
-        rm_group(update, context)
-
-    elif message_text.startswith('/c_start'):
-        custom_start_command(update, context)
-
-    elif message_text.startswith('/c_stop'):
-        custom_stop_command(update, context)
-
-    elif message_text.startswith('/c_ls'):
-        custom_list_files(update, context)
-
-    elif message_text.startswith('/c_get'):
-        custom_get_document(update, context)
-
-    elif message_text.startswith('/help'):
-        help_command(update, context)
+    command_function = command_mapping.get(message_text)
+    if command_function:
+        command_function(update, context)
 
 
 def handle_mention(update, context):
@@ -188,71 +150,34 @@ def handle_mention(update, context):
         if len(words) > 1:
             command = words[1]
 
-            if command == '/start':
-                start_command(update, context)
+            command_mapping = {
+                '/start': start_command,
+                '/stop': stop_command,
+                '/mkdir': mkdir,
+                '/mv': move,
+                '/ls': list_files,
+                '/trls': tree_list_files,
+                '/rm': remove,
+                '/cp': cp,
+                '/get': get_document,
+                '/getdir': get_directory,
+                '/ctime': ctime_command,
+                '/mtime': mtime_command,
+                '/cd': set_mount_dir,
+                '/returnmount': revert_mount_dir,
+                '/archget': get_archive,
+                '/group': group_files,
+                '/ungroup': rm_group,
+                '/c_start': custom_start_command,
+                '/c_stop': custom_stop_command,
+                '/c_ls': custom_list_files,
+                '/c_get': custom_get_document,
+                '/help': help_command
+            }
 
-            elif command == '/stop':
-                stop_command(update, context)
-
-            elif command == '/mkdir':
-                mkdir(update, context)
-
-            elif command == '/mv':
-                move(update, context)
-
-            elif command == '/ls':
-                list_files(update, context)
-
-            elif command == '/trls':
-                tree_list_files(update, context)
-
-            elif command == '/rm':
-                remove(update, context)
-
-            elif command == '/cp':
-                cp(update, context)
-
-            elif command == '/get':
-                get_document(update, context)
-
-            elif command == '/getdir':
-                get_directory(update, context)
-
-            elif command == '/ctime':
-                ctime_command(update, context)
-
-            elif command == '/mtime':
-                mtime_command(update, context)
-
-            elif command == '/cd':
-                set_mount_dir(update, context)
-
-            elif command == '/returnmount':
-                revert_mount_dir(update, context)
-
-            elif command == '/archget':
-                get_archive(update, context)
-
-            elif command == '/group':
-                group_files(update, context)
-
-            elif command == '/ungroup':
-                rm_group(update, context)
-
-            elif command == '/c_start':
-                custom_start_command(update, context)
-
-            elif command == '/c_stop':
-                custom_stop_command(update, context)
-
-            elif command == '/c_ls':
-                custom_list_files(update, context)
-
-            elif command == '/c_get':
-                custom_get_document(update, context)
-
-            elif command == '/help':
-                help_command(update, context)
+            command_function = command_mapping.get(command)
+            if command_function:
+                command_function(update, context)
 
 
 def cancel(update, context):
@@ -1500,7 +1425,7 @@ def set_mount_dir(update: Update, context: CallbackContext):
 
     try:
         message_text = update.message.text
-        match = re.search(r'/setmount\s+(\S+)$', message_text)
+        match = re.search(r'/cd\s+(\S+)$', message_text)
 
         if match:
             new_mount_point = match.group(1)
