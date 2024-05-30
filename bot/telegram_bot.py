@@ -12,7 +12,7 @@ from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
 import config
-from bot.archivator import untar_file, unzip_file
+from bot.archivator import untar_file, unzip_file, delete_file_from_zip, delete_file_from_tar
 from bot.converter import create_empty_jpg, convert_png_to_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from bot.custom_fs_utils import custom_start_fuse, custom_unmount_fs
@@ -158,6 +158,9 @@ def handle_private(update, context):
     elif message_text.startswith('/archget'):
         get_archive(update, context)
 
+    elif message_text.startswith('/archdel'):
+        archive_file_deliter(update, context)
+
     elif message_text.startswith('/group'):
         group_files(update, context)
 
@@ -235,6 +238,9 @@ def handle_mention(update, context):
 
             elif command == '/archget':
                 get_archive(update, context)
+
+            elif command == '/archdel':
+                archive_file_deliter(update, context)
 
             elif command == '/group':
                 group_files(update, context)
@@ -1651,3 +1657,54 @@ def get_archive(update: Update, context: CallbackContext):
     final_response = "\n".join(tree_lines)
 
     update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
+
+
+def get_unique_name(base_path):
+    if not os.path.exists(base_path):
+        return base_path
+    base_name, ext = os.path.splitext(base_path)
+    counter = 1
+    unique_path = f"{base_name}_new{counter}{ext}"
+    while os.path.exists(unique_path):
+        counter += 1
+        unique_path = f"{base_name}_new{counter}{ext}"
+    return unique_path
+
+
+def archive_file_deliter(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/archdel\s+("([^"]+)"|(\S+))\s+("([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /archdel <file_name> <archive_path>.")
+        return
+
+    file_name = match.group(2) or match.group(3)
+    archive_path = match.group(5) or match.group(6)
+    if file_name is None or archive_path is None:
+        update.message.reply_text("Ошибка: используйте /archdel <file_name> <archive_path>.")
+        return
+
+    absolute_archive_path = os.path.abspath(os.path.join(config.MOUNT_POINT, archive_path))
+    if not os.path.exists(absolute_archive_path) or not (absolute_archive_path.endswith('.zip') or absolute_archive_path.endswith('.tar')):
+        update.message.reply_text(f"Ошибка: архив {archive_path} не найден или не является архивом.")
+        return
+
+    new_archive_path = get_unique_name(absolute_archive_path)
+
+    try:
+        if absolute_archive_path.endswith('.zip'):
+            delete_file_from_zip(absolute_archive_path, file_name)
+        elif absolute_archive_path.endswith('.tar'):
+            delete_file_from_tar(absolute_archive_path, file_name)
+
+        update.message.reply_text(f"Файл {file_name} удален из архива.")
+        logger.info(f"File {file_name} deleted from archive {absolute_archive_path} by user {update.message.from_user.id}")
+
+    except Exception as e:
+        update.message.reply_text(f"Произошла ошибка при удалении файла из архива.")
+        logger.error(f"Exception in archive_file_deliter: {e}")
+
+    return ConversationHandler.END
