@@ -1,4 +1,6 @@
+import grp
 import os
+import pwd
 import shutil
 import subprocess
 import tarfile
@@ -29,7 +31,7 @@ custom_config_path = ''
 
 
 def help_command(update: Update, context):
-    if context.args and context.args[0] == "-b":
+    if '-b' in update.message.text:
         text = "(Help) I need somebody\n(Help) Not just anybody\n(Help) You know I need someone\n(Help!)"
         update.message.reply_text(text)
         return ConversationHandler.END
@@ -53,6 +55,7 @@ def help_command(update: Update, context):
             "/group <srs> <dir> - группировка mp3",
             "/ungroup - удаление группировки mp3",
             "/archget <dir> - получений разархивированных копий директории dir",
+            "/archdel <file name.ext> <srs> - удаление файла из архива",
             "/convert <dir> - подключение  директории для конвертации",
             "/c_start <mount> <conf> - подключение кастомной ФС",
             "/c_stop - отключение кастомной ФС",
@@ -111,77 +114,37 @@ def check_mention(update, context) -> bool:
 
 
 def handle_private(update, context):
-    message_text = update.message.text
+    message_text = update.message.text.split()[0]
+    command_mapping = {
+        '/stop': stop_command,
+        '/start': start_command,
+        '/mkdir': mkdir,
+        '/mv': move,
+        '/ls': list_files,
+        '/trls': tree_list_files,
+        '/rm': remove,
+        '/cp': cp,
+        '/get': get_document,
+        '/getdir': get_directory,
+        '/ctime': ctime_command,
+        '/mtime': mtime_command,
+        '/cd': set_mount_dir,
+        '/returnmount': revert_mount_dir,
+        '/archget': get_archive,
+        '/group': group_files,
+        '/ungroup': rm_group,
+        '/c_start': custom_start_command,
+        '/c_stop': custom_stop_command,
+        '/c_ls': custom_list_files,
+        '/c_get': custom_get_document,
+        '/help': help_command,
+        '/finfo': file_info,
+        '/archdel': archive_file_deliter,
+    }
 
-    if message_text.startswith('/stop'):
-        stop_command(update, context)
-
-    elif message_text.startswith('/start'):
-        start_command(update, context)
-
-    elif message_text.startswith('/mkdir'):
-        mkdir(update, context)
-
-    elif message_text.startswith('/mv'):
-        move(update, context)
-
-    elif message_text.startswith('/ls'):
-        list_files(update, context)
-
-    elif message_text.startswith('/trls'):
-        tree_list_files(update, context)
-
-    elif message_text.startswith('/rm'):
-        remove(update, context)
-
-    elif message_text.startswith('/cp'):
-        cp(update, context)
-
-    elif message_text.startswith('/get'):
-        get_document(update, context)
-
-    elif message_text.startswith('/getdir'):
-        get_directory(update, context)
-
-    elif message_text.startswith('/ctime'):
-        ctime_command(update, context)
-
-    elif message_text.startswith('/mtime'):
-        mtime_command(update, context)
-
-    elif message_text.startswith('/cd'):
-        set_mount_dir(update, context)
-
-    elif message_text.startswith('/returnmount'):
-        revert_mount_dir(update, context)
-
-    elif message_text.startswith('/archget'):
-        get_archive(update, context)
-
-    elif message_text.startswith('/archdel'):
-        archive_file_deliter(update, context)
-
-    elif message_text.startswith('/group'):
-        group_files(update, context)
-
-    elif message_text.startswith('/ungroup'):
-        rm_group(update, context)
-
-    elif message_text.startswith('/c_start'):
-        custom_start_command(update, context)
-
-    elif message_text.startswith('/c_stop'):
-        custom_stop_command(update, context)
-
-    elif message_text.startswith('/c_ls'):
-        custom_list_files(update, context)
-
-    elif message_text.startswith('/c_get'):
-        custom_get_document(update, context)
-
-    elif message_text.startswith('/help'):
-        help_command(update, context)
-
+    command_function = command_mapping.get(message_text)
+    if command_function:
+        command_function(update, context)
     else:
         update.message.reply_text('неверная команда. Для получения списка доступных команд введите /help')
 
@@ -194,77 +157,82 @@ def handle_mention(update, context):
         if len(words) > 1:
             command = words[1]
 
-            if command == '/start':
-                start_command(update, context)
+            command_mapping = {
+                '/start': start_command,
+                '/stop': stop_command,
+                '/mkdir': mkdir,
+                '/mv': move,
+                '/ls': list_files,
+                '/trls': tree_list_files,
+                '/rm': remove,
+                '/cp': cp,
+                '/get': get_document,
+                '/getdir': get_directory,
+                '/ctime': ctime_command,
+                '/mtime': mtime_command,
+                '/cd': set_mount_dir,
+                '/returnmount': revert_mount_dir,
+                '/archget': get_archive,
+                '/group': group_files,
+                '/ungroup': rm_group,
+                '/c_start': custom_start_command,
+                '/c_stop': custom_stop_command,
+                '/c_ls': custom_list_files,
+                '/c_get': custom_get_document,
+                '/help': help_command,
+                '/finfo': file_info,
+                '/archdel': archive_file_deliter,
+            }
 
-            elif command == '/stop':
-                stop_command(update, context)
+            command_function = command_mapping.get(command)
+            if command_function:
+                command_function(update, context)
 
-            elif command == '/mkdir':
-                mkdir(update, context)
 
-            elif command == '/mv':
-                move(update, context)
+def file_info(update, context):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
 
-            elif command == '/ls':
-                list_files(update, context)
+    message_text = update.message.text
+    match = re.search(r'/finfo\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /finfo <file | dir>.")
+        return ConversationHandler.END
 
-            elif command == '/trls':
-                tree_list_files(update, context)
+    relative_path = match.group(1) or match.group(2)
+    if relative_path is None:
+        update.message.reply_text("Ошибка: используйте /finfo <file | dir>.")
+        return ConversationHandler.END
 
-            elif command == '/rm':
-                remove(update, context)
+    full_path = os.path.join(config.MOUNT_POINT, relative_path)
 
-            elif command == '/cp':
-                cp(update, context)
+    if not os.path.exists(full_path):
+        update.message.reply_text("Ошибка: файл или директория не существует.")
+        return ConversationHandler.END
 
-            elif command == '/get':
-                get_document(update, context)
+    try:
+        file_stats = os.stat(full_path)
+        file_size = file_stats.st_size
+        file_owner = pwd.getpwuid(file_stats.st_uid).pw_name
+        file_group = grp.getgrgid(file_stats.st_gid).gr_name
+        file_permissions_octal = oct(file_stats.st_mode & 0o777)
 
-            elif command == '/getdir':
-                get_directory(update, context)
+        file_type = 'Файл' if os.path.isfile(full_path) else 'Директория' if os.path.isdir(
+            full_path) else 'Символическая ссылка' if os.path.islink(full_path) else 'Другой'
 
-            elif command == '/ctime':
-                ctime_command(update, context)
+        file_info_message = (
+            f"Информация о {file_type.lower()} {relative_path}:\n"
+            f"Размер: {file_size} байт\n"
+            f"Владелец: {file_owner}\n"
+            f"Группа: {file_group}\n"
+            f"Права доступа: {file_permissions_octal}\n"
+        )
 
-            elif command == '/mtime':
-                mtime_command(update, context)
-
-            elif command == '/cd':
-                set_mount_dir(update, context)
-
-            elif command == '/returnmount':
-                revert_mount_dir(update, context)
-
-            elif command == '/archget':
-                get_archive(update, context)
-
-            elif command == '/archdel':
-                archive_file_deliter(update, context)
-
-            elif command == '/group':
-                group_files(update, context)
-
-            elif command == '/ungroup':
-                rm_group(update, context)
-
-            elif command == '/c_start':
-                custom_start_command(update, context)
-
-            elif command == '/c_stop':
-                custom_stop_command(update, context)
-
-            elif command == '/c_ls':
-                custom_list_files(update, context)
-
-            elif command == '/c_get':
-                custom_get_document(update, context)
-
-            elif command == '/help':
-                help_command(update, context)
-
-            else:
-                update.message.reply_text(f'неверная команда. Для получения списка доступных команд введите /help@{context.bot.username}')
+        split_and_send_message(update, file_info_message)
+    except Exception as e:
+        logger.error(e)
+        update.message.reply_text("Ошибка при получении информации о файле")
+        return ConversationHandler.END
 
 
 def cancel(update, context):
@@ -1514,8 +1482,6 @@ def set_mount_dir(update: Update, context: CallbackContext):
         message_text = update.message.text
         match = re.search(r'/cd\s+("[^"]+"|\S+)$', message_text)
 
-        print(match)
-
         if match:
             new_mount_point = match.group(1).strip('"')
 
@@ -1633,6 +1599,7 @@ def get_archive(update: Update, context: CallbackContext):
 
     for root, dirs, files in os.walk(absolute_directory_path):
         for file in files:
+            file_path = os.path.join(root, file)
             if file.endswith('.zip') or file.endswith('.tar'):
                 file_path = os.path.join(root, file)
                 destination_path = os.path.join(config.MOUNT_POINT, file)
@@ -1654,6 +1621,7 @@ def get_archive(update: Update, context: CallbackContext):
     response += f"{extracted_tree_structure}"
 
     tree_lines = [line for line in response.split('\n') if line.strip()]
+
     final_response = "\n".join(tree_lines)
 
     update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
