@@ -183,7 +183,7 @@ def handle_mention(update, context):
                 command_function(update, context)
 
 
-def file_info(update: Update, context: CallbackContext) -> int:
+def file_info(update, context):
     if check_fuse(update) is ConversationHandler.END:
         return ConversationHandler.END
 
@@ -1607,3 +1607,4 @@ def get_archive(update: Update, context: CallbackContext):
     final_response = "\n".join(tree_lines)
 
     update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
+    
