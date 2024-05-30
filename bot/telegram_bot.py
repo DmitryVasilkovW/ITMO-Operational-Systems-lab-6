@@ -179,6 +179,9 @@ def handle_private(update, context):
     elif message_text.startswith('/help'):
         help_command(update, context)
 
+    else:
+        update.message.reply_text('неверная команда. Для получения списка доступных команд введите /help')
+
 
 def handle_mention(update, context):
     if check_mention(update, context):
@@ -253,6 +256,9 @@ def handle_mention(update, context):
 
             elif command == '/help':
                 help_command(update, context)
+
+            else:
+                update.message.reply_text(f'неверная команда. Для получения списка доступных команд введите /help@{context.bot.username}')
 
 
 def cancel(update, context):
@@ -1500,33 +1506,47 @@ def set_mount_dir(update: Update, context: CallbackContext):
 
     try:
         message_text = update.message.text
-        match = re.search(r'/setmount\s+(\S+)$', message_text)
+        match = re.search(r'/cd\s+("[^"]+"|\S+)$', message_text)
+
+        print(match)
 
         if match:
-            new_mount_point = match.group(1)
+            new_mount_point = match.group(1).strip('"')
 
-            if not os.path.exists(new_mount_point):
-                update.message.reply_text(f"Ошибка: Путь {new_mount_point} не существует.")
+            print(new_mount_point)
+
+            if new_mount_point is None:
+                update.message.reply_text("Ошибка: неправильный формат команды. Используйте /cd <путь>.")
                 return ConversationHandler.END
 
-            if new_mount_point != config.MOUNT_POINT:
+            full_path = os.path.join(config.MOUNT_POINT, new_mount_point)
+
+            if not os.path.exists(full_path):
+                update.message.reply_text(f"Ошибка: Путь {full_path} не существует.")
+                return ConversationHandler.END
+
+            if not os.path.isdir(full_path):
+                update.message.reply_text(f"Ошибка: Путь {full_path} не является каталогом.")
+                return ConversationHandler.END
+
+            if full_path != config.MOUNT_POINT:
                 if config.IS_RESERVED:
-                    config.MOUNT_POINT = new_mount_point
-                    update.message.reply_text(f"Новый путь для монтирования установлен: {new_mount_point}")
-                    logger.info(f"Mount point changed to {new_mount_point} by user {update.message.from_user.id}")
+                    config.MOUNT_POINT = full_path
+                    update.message.reply_text(f"Новый путь для монтирования установлен: {full_path}")
+                    logger.info(f"Mount point changed to {full_path} by user {update.message.from_user.id}")
                 else:
                     config.RESERVED_MOUNT_POINT = config.MOUNT_POINT
-                    config.MOUNT_POINT = new_mount_point
+                    config.MOUNT_POINT = full_path
                     config.IS_RESERVED = True
-                    update.message.reply_text(f"Новый путь для монтирования установлен: {new_mount_point}")
-                    logger.info(f"Mount point changed to {new_mount_point} by user {update.message.from_user.id}")
+                    update.message.reply_text(f"Новый путь для монтирования установлен: {full_path}")
+                    logger.info(f"Mount point changed to {full_path} by user {update.message.from_user.id}")
             else:
                 update.message.reply_text(f"Ошибка: Указанный путь не может быть установлен.")
                 logger.warning(
-                    f"Attempt to set mount point to {new_mount_point} failed: path is the same as current.")
+                    f"Attempt to set mount point to {full_path} failed: path is the same as current.")
 
         else:
-            update.message.reply_text("Ошибка: неправильный формат команды. Используйте /setmount <путь>.")
+            update.message.reply_text("Ошибка: неправильный формат команды. Используйте /cd <путь>.")
 
     except FileNotFoundError as e:
         update.message.reply_text(f"Ошибка: Путь не найден.")
@@ -1546,6 +1566,13 @@ def revert_mount_dir(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
     try:
+        if config.MOUNT_POINT == config.RESERVED_MOUNT_POINT or not config.RESERVED_MOUNT_POINT:
+            update.message.reply_text(f"Вы уже находитесь в текущем маунт поинте. Ваш текущий путь: {config.MOUNT_POINT}")
+            config.RESERVED_MOUNT_POINT = None
+            config.IS_RESERVED = False
+            logger.info(f"User {update.message.from_user.id} attempted to revert mount point but is already there or no reserved mount point exists.")
+            return ConversationHandler.END
+
         if config.IS_RESERVED and config.RESERVED_MOUNT_POINT:
             config.MOUNT_POINT = config.RESERVED_MOUNT_POINT
             config.RESERVED_MOUNT_POINT = None
@@ -1590,36 +1617,30 @@ def get_archive(update: Update, context: CallbackContext):
         update.message.reply_text(f"Ошибка: директория {directory_path} не найдена.")
         return
 
+    def get_unique_name(base_path):
+        counter = 1
+        unique_path = base_path
+        while os.path.exists(unique_path):
+            unique_path = f"{base_path}_{counter}"
+            counter += 1
+        return unique_path
+
     for root, dirs, files in os.walk(absolute_directory_path):
         for file in files:
-            file_path = os.path.join(root, file)
             if file.endswith('.zip') or file.endswith('.tar'):
-                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
+                file_path = os.path.join(root, file)
+                destination_path = os.path.join(config.MOUNT_POINT, file)
+                unique_destination_path = get_unique_name(destination_path)
+                shutil.copy(file_path, unique_destination_path)
+
                 extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
+                unique_extract_dir = get_unique_name(extract_dir)
                 if file.endswith('.zip'):
-                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                    unzip_file(unique_destination_path, unique_extract_dir)
                 elif file.endswith('.tar'):
-                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                    untar_file(unique_destination_path, unique_extract_dir)
 
     original_tree_structure = tree(absolute_directory_path)
-
-    for root, dirs, files in os.walk(config.MOUNT_POINT):
-        for dir in dirs:
-            dir_path = os.path.join(root, dir)
-            if os.path.isdir(dir_path):
-                shutil.rmtree(dir_path)
-
-    for root, dirs, files in os.walk(absolute_directory_path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            if file.endswith('.zip') or file.endswith('.tar'):
-                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
-                extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
-                if file.endswith('.zip'):
-                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
-                elif file.endswith('.tar'):
-                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
-
     extracted_tree_structure = tree(config.MOUNT_POINT)
 
     response = f"Директория: {absolute_directory_path}\n"
@@ -1627,7 +1648,6 @@ def get_archive(update: Update, context: CallbackContext):
     response += f"{extracted_tree_structure}"
 
     tree_lines = [line for line in response.split('\n') if line.strip()]
-
     final_response = "\n".join(tree_lines)
 
     update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
