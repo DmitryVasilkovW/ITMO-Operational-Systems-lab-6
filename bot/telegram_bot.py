@@ -14,7 +14,7 @@ from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
 import config
-from bot.archivator import untar_file, unzip_file
+from bot.archivator import untar_file, unzip_file, delete_file_from_zip, delete_file_from_tar
 from bot.converter import create_empty_jpg, convert_png_to_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from bot.custom_fs_utils import custom_start_fuse, custom_unmount_fs
@@ -138,11 +138,15 @@ def handle_private(update, context):
         '/c_get': custom_get_document,
         '/help': help_command,
         '/finfo': file_info,
+        '/archget': get_archive,
+        '/archdel': archive_file_deliter,
     }
 
     command_function = command_mapping.get(message_text)
     if command_function:
         command_function(update, context)
+    else:
+        update.message.reply_text('неверная команда. Для получения списка доступных команд введите /help')
 
 
 def handle_mention(update, context):
@@ -177,6 +181,8 @@ def handle_mention(update, context):
                 '/c_get': custom_get_document,
                 '/help': help_command,
                 '/finfo': file_info,
+                '/archget': get_archive,
+                '/archdel': archive_file_deliter,
             }
 
             command_function = command_mapping.get(command)
@@ -228,8 +234,6 @@ def file_info(update, context):
         logger.error(e)
         update.message.reply_text("Ошибка при получении информации о файле")
         return ConversationHandler.END
-
-    return ConversationHandler.END
 
 
 def cancel(update, context):
@@ -1477,33 +1481,45 @@ def set_mount_dir(update: Update, context: CallbackContext):
 
     try:
         message_text = update.message.text
-        match = re.search(r'/cd\s+(\S+)$', message_text)
+        match = re.search(r'/cd\s+("[^"]+"|\S+)$', message_text)
 
         if match:
-            new_mount_point = match.group(1)
+            new_mount_point = match.group(1).strip('"')
 
-            if not os.path.exists(new_mount_point):
-                update.message.reply_text(f"Ошибка: Путь {new_mount_point} не существует.")
+            print(new_mount_point)
+
+            if new_mount_point is None:
+                update.message.reply_text("Ошибка: неправильный формат команды. Используйте /cd <путь>.")
                 return ConversationHandler.END
 
-            if new_mount_point != config.MOUNT_POINT:
+            full_path = os.path.join(config.MOUNT_POINT, new_mount_point)
+
+            if not os.path.exists(full_path):
+                update.message.reply_text(f"Ошибка: Путь {full_path} не существует.")
+                return ConversationHandler.END
+
+            if not os.path.isdir(full_path):
+                update.message.reply_text(f"Ошибка: Путь {full_path} не является каталогом.")
+                return ConversationHandler.END
+
+            if full_path != config.MOUNT_POINT:
                 if config.IS_RESERVED:
-                    config.MOUNT_POINT = new_mount_point
-                    update.message.reply_text(f"Новый путь для монтирования установлен: {new_mount_point}")
-                    logger.info(f"Mount point changed to {new_mount_point} by user {update.message.from_user.id}")
+                    config.MOUNT_POINT = full_path
+                    update.message.reply_text(f"Новый путь для монтирования установлен: {full_path}")
+                    logger.info(f"Mount point changed to {full_path} by user {update.message.from_user.id}")
                 else:
                     config.RESERVED_MOUNT_POINT = config.MOUNT_POINT
-                    config.MOUNT_POINT = new_mount_point
+                    config.MOUNT_POINT = full_path
                     config.IS_RESERVED = True
-                    update.message.reply_text(f"Новый путь для монтирования установлен: {new_mount_point}")
-                    logger.info(f"Mount point changed to {new_mount_point} by user {update.message.from_user.id}")
+                    update.message.reply_text(f"Новый путь для монтирования установлен: {full_path}")
+                    logger.info(f"Mount point changed to {full_path} by user {update.message.from_user.id}")
             else:
                 update.message.reply_text(f"Ошибка: Указанный путь не может быть установлен.")
                 logger.warning(
-                    f"Attempt to set mount point to {new_mount_point} failed: path is the same as current.")
+                    f"Attempt to set mount point to {full_path} failed: path is the same as current.")
 
         else:
-            update.message.reply_text("Ошибка: неправильный формат команды. Используйте /setmount <путь>.")
+            update.message.reply_text("Ошибка: неправильный формат команды. Используйте /cd <путь>.")
 
     except FileNotFoundError as e:
         update.message.reply_text(f"Ошибка: Путь не найден.")
@@ -1523,6 +1539,13 @@ def revert_mount_dir(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
     try:
+        if config.MOUNT_POINT == config.RESERVED_MOUNT_POINT or not config.RESERVED_MOUNT_POINT:
+            update.message.reply_text(f"Вы уже находитесь в текущем маунт поинте. Ваш текущий путь: {config.MOUNT_POINT}")
+            config.RESERVED_MOUNT_POINT = None
+            config.IS_RESERVED = False
+            logger.info(f"User {update.message.from_user.id} attempted to revert mount point but is already there or no reserved mount point exists.")
+            return ConversationHandler.END
+
         if config.IS_RESERVED and config.RESERVED_MOUNT_POINT:
             config.MOUNT_POINT = config.RESERVED_MOUNT_POINT
             config.RESERVED_MOUNT_POINT = None
@@ -1567,36 +1590,31 @@ def get_archive(update: Update, context: CallbackContext):
         update.message.reply_text(f"Ошибка: директория {directory_path} не найдена.")
         return
 
+    def get_unique_name(base_path):
+        counter = 1
+        unique_path = base_path
+        while os.path.exists(unique_path):
+            unique_path = f"{base_path}_{counter}"
+            counter += 1
+        return unique_path
+
     for root, dirs, files in os.walk(absolute_directory_path):
         for file in files:
             file_path = os.path.join(root, file)
             if file.endswith('.zip') or file.endswith('.tar'):
-                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
+                file_path = os.path.join(root, file)
+                destination_path = os.path.join(config.MOUNT_POINT, file)
+                unique_destination_path = get_unique_name(destination_path)
+                shutil.copy(file_path, unique_destination_path)
+
                 extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
+                unique_extract_dir = get_unique_name(extract_dir)
                 if file.endswith('.zip'):
-                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                    unzip_file(unique_destination_path, unique_extract_dir)
                 elif file.endswith('.tar'):
-                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                    untar_file(unique_destination_path, unique_extract_dir)
 
     original_tree_structure = tree(absolute_directory_path)
-
-    for root, dirs, files in os.walk(config.MOUNT_POINT):
-        for dir in dirs:
-            dir_path = os.path.join(root, dir)
-            if os.path.isdir(dir_path):
-                shutil.rmtree(dir_path)
-
-    for root, dirs, files in os.walk(absolute_directory_path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            if file.endswith('.zip') or file.endswith('.tar'):
-                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
-                extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
-                if file.endswith('.zip'):
-                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
-                elif file.endswith('.tar'):
-                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
-
     extracted_tree_structure = tree(config.MOUNT_POINT)
 
     response = f"Директория: {absolute_directory_path}\n"
@@ -1608,3 +1626,55 @@ def get_archive(update: Update, context: CallbackContext):
     final_response = "\n".join(tree_lines)
 
     update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
+
+
+def get_unique_name(base_path):
+    if not os.path.exists(base_path):
+        return base_path
+    base_name, ext = os.path.splitext(base_path)
+    counter = 1
+    unique_path = f"{base_name}_new{counter}{ext}"
+    while os.path.exists(unique_path):
+        counter += 1
+        unique_path = f"{base_name}_new{counter}{ext}"
+    return unique_path
+
+
+def archive_file_deliter(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/archdel\s+("([^"]+)"|(\S+))\s+("([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /archdel <file_name> <archive_path>.")
+        return
+
+    file_name = match.group(2) or match.group(3)
+    archive_path = match.group(5) or match.group(6)
+    if file_name is None or archive_path is None:
+        update.message.reply_text("Ошибка: используйте /archdel <file_name> <archive_path>.")
+        return
+
+    absolute_archive_path = os.path.abspath(os.path.join(config.MOUNT_POINT, archive_path))
+    if not os.path.exists(absolute_archive_path) or not (absolute_archive_path.endswith('.zip') or absolute_archive_path.endswith('.tar')):
+        update.message.reply_text(f"Ошибка: архив {archive_path} не найден или не является архивом.")
+        return
+
+    new_archive_path = get_unique_name(absolute_archive_path)
+
+    try:
+        if absolute_archive_path.endswith('.zip'):
+            delete_file_from_zip(absolute_archive_path, file_name)
+        elif absolute_archive_path.endswith('.tar'):
+            delete_file_from_tar(absolute_archive_path, file_name)
+
+        update.message.reply_text(f"Файл {file_name} удален из архива.")
+        logger.info(f"File {file_name} deleted from archive {absolute_archive_path} by user {update.message.from_user.id}")
+
+    except Exception as e:
+        update.message.reply_text(f"Произошла ошибка при удалении файла из архива.")
+        logger.error(f"Exception in archive_file_deliter: {e}")
+
+    return ConversationHandler.END
+
