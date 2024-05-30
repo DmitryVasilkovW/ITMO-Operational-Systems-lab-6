@@ -12,7 +12,8 @@ from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
 import config
-from bot.converter import create_empty_jpg
+from bot.archivator import untar_file, unzip_file
+from bot.converter import create_empty_jpg, convert_png_to_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from bot.custom_fs_utils import custom_start_fuse, custom_unmount_fs
 from bot.custom_listing_utils import parse_directory_listing
@@ -145,6 +146,15 @@ def handle_private(update, context):
     elif message_text.startswith('/mtime'):
         mtime_command(update, context)
 
+    elif message_text.startswith('/cd'):
+        set_mount_dir(update, context)
+
+    elif message_text.startswith('/returnmount'):
+        revert_mount_dir(update, context)
+
+    elif message_text.startswith('/archget'):
+        get_archive(update, context)
+
     elif message_text.startswith('/group'):
         group_files(update, context)
 
@@ -210,6 +220,15 @@ def handle_mention(update, context):
 
             elif command == '/mtime':
                 mtime_command(update, context)
+
+            elif command == '/cd':
+                set_mount_dir(update, context)
+
+            elif command == '/returnmount':
+                revert_mount_dir(update, context)
+
+            elif command == '/archget':
+                get_archive(update, context)
 
             elif command == '/group':
                 group_files(update, context)
@@ -378,6 +397,16 @@ def get_document(update, context):
     if not os.path.exists(absolute_path) or not os.path.isfile(absolute_path):
         update.message.reply_text(f"Ошибка: файл {relative_path} не найден.")
         return
+
+    if absolute_path.endswith('.jpg'):
+        png_path = absolute_path[:-3] + 'png'
+        if os.path.exists(png_path) and os.path.isfile(png_path):
+            convert_png_to_jpg(png_path)
+            jpg_path = png_path[:-3] + 'jpg'
+            with open(jpg_path, 'rb') as file:
+                update.message.reply_document(document=file)
+            os.remove(jpg_path)
+            return
 
     with open(absolute_path, 'rb') as file:
         update.message.reply_document(document=file)
@@ -1460,3 +1489,142 @@ def custom_get_document(update, context):
 
     with open(absolute_path, 'rb') as file:
         update.message.reply_document(document=file)
+
+
+def set_mount_dir(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    try:
+        message_text = update.message.text
+        match = re.search(r'/setmount\s+(\S+)$', message_text)
+
+        if match:
+            new_mount_point = match.group(1)
+
+            if not os.path.exists(new_mount_point):
+                update.message.reply_text(f"Ошибка: Путь {new_mount_point} не существует.")
+                return ConversationHandler.END
+
+            if new_mount_point != config.MOUNT_POINT:
+                if config.IS_RESERVED:
+                    config.MOUNT_POINT = new_mount_point
+                    update.message.reply_text(f"Новый путь для монтирования установлен: {new_mount_point}")
+                    logger.info(f"Mount point changed to {new_mount_point} by user {update.message.from_user.id}")
+                else:
+                    config.RESERVED_MOUNT_POINT = config.MOUNT_POINT
+                    config.MOUNT_POINT = new_mount_point
+                    config.IS_RESERVED = True
+                    update.message.reply_text(f"Новый путь для монтирования установлен: {new_mount_point}")
+                    logger.info(f"Mount point changed to {new_mount_point} by user {update.message.from_user.id}")
+            else:
+                update.message.reply_text(f"Ошибка: Указанный путь не может быть установлен.")
+                logger.warning(
+                    f"Attempt to set mount point to {new_mount_point} failed: path is the same as current.")
+
+        else:
+            update.message.reply_text("Ошибка: неправильный формат команды. Используйте /setmount <путь>.")
+
+    except FileNotFoundError as e:
+        update.message.reply_text(f"Ошибка: Путь не найден.")
+        logger.error(f"FileNotFoundError in set_mount_dir: {e}")
+    except PermissionError as e:
+        update.message.reply_text(f"Ошибка: Недостаточно прав для доступа к пути.")
+        logger.error(f"PermissionError in set_mount_dir: {e}")
+    except Exception as e:
+        update.message.reply_text(f"Произошла ошибка при обработке команды.")
+        logger.error(f"Exception in set_mount_dir: {e}")
+
+    return ConversationHandler.END
+
+
+def revert_mount_dir(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    try:
+        if config.IS_RESERVED and config.RESERVED_MOUNT_POINT:
+            config.MOUNT_POINT = config.RESERVED_MOUNT_POINT
+            config.RESERVED_MOUNT_POINT = None
+            config.IS_RESERVED = False
+            update.message.reply_text(f"Путь для монтирования возвращен к: {config.MOUNT_POINT}")
+            logger.info(f"Mount point reverted to {config.MOUNT_POINT} by user {update.message.from_user.id}")
+        else:
+            update.message.reply_text("Ошибка: Нет резервного пути для восстановления.")
+            logger.warning("Attempt to revert mount point failed: either no reserved path or reserve flag is not set.")
+
+    except FileNotFoundError as e:
+        update.message.reply_text(f"Ошибка: Путь не найден.")
+        logger.error(f"FileNotFoundError in revert_mount_dir: {e}")
+    except PermissionError as e:
+        update.message.reply_text(f"Ошибка: Недостаточно прав для доступа к пути.")
+        logger.error(f"PermissionError in revert_mount_dir: {e}")
+    except Exception as e:
+        update.message.reply_text(f"Произошла ошибка при возврате монтирования.")
+        logger.error(f"Exception in revert_mount_dir: {e}")
+
+    return ConversationHandler.END
+
+
+def get_archive(update: Update, context: CallbackContext):
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/archget\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /archget <directory_path>.")
+        return
+
+    directory_path = match.group(1) or match.group(2)
+    if directory_path is None:
+        update.message.reply_text("Ошибка: используйте /archget <directory_path>.")
+        return
+
+    absolute_directory_path = os.path.abspath(directory_path)
+
+    if not os.path.exists(absolute_directory_path) or not os.path.isdir(absolute_directory_path):
+        update.message.reply_text(f"Ошибка: директория {directory_path} не найдена.")
+        return
+
+    for root, dirs, files in os.walk(absolute_directory_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if file.endswith('.zip') or file.endswith('.tar'):
+                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
+                extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
+                if file.endswith('.zip'):
+                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                elif file.endswith('.tar'):
+                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+
+    original_tree_structure = tree(absolute_directory_path)
+
+    for root, dirs, files in os.walk(config.MOUNT_POINT):
+        for dir in dirs:
+            dir_path = os.path.join(root, dir)
+            if os.path.isdir(dir_path):
+                shutil.rmtree(dir_path)
+
+    for root, dirs, files in os.walk(absolute_directory_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if file.endswith('.zip') or file.endswith('.tar'):
+                shutil.copy(file_path, os.path.join(config.MOUNT_POINT, file))
+                extract_dir = os.path.join(config.MOUNT_POINT, os.path.splitext(file)[0])
+                if file.endswith('.zip'):
+                    unzip_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+                elif file.endswith('.tar'):
+                    untar_file(os.path.join(config.MOUNT_POINT, file), extract_dir)
+
+    extracted_tree_structure = tree(config.MOUNT_POINT)
+
+    response = f"Директория: {absolute_directory_path}\n"
+    response += f"{original_tree_structure}\n\nРазархивированные файлы:\n\n"
+    response += f"{extracted_tree_structure}"
+
+    tree_lines = [line for line in response.split('\n') if line.strip()]
+
+    final_response = "\n".join(tree_lines)
+
+    update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
