@@ -109,7 +109,6 @@ def check_mention(update, context) -> bool:
 
     return bot_username in entities
 
-
 def handle_private(update, context):
     message_text = update.message.text.split()[0]
     command_mapping = {
@@ -134,7 +133,8 @@ def handle_private(update, context):
         '/c_stop': custom_stop_command,
         '/c_ls': custom_list_files,
         '/c_get': custom_get_document,
-        '/help': help_command
+        '/help': help_command,
+        '/finfo': file_info,
     }
 
     command_function = command_mapping.get(message_text)
@@ -172,12 +172,55 @@ def handle_mention(update, context):
                 '/c_stop': custom_stop_command,
                 '/c_ls': custom_list_files,
                 '/c_get': custom_get_document,
-                '/help': help_command
+                '/help': help_command,
+                '/finfo': file_info,
             }
 
             command_function = command_mapping.get(command)
             if command_function:
                 command_function(update, context)
+
+
+def file_info(update: Update, context: CallbackContext) -> int:
+    if check_fuse(update) is ConversationHandler.END:
+        return ConversationHandler.END
+
+    message_text = update.message.text
+    match = re.search(r'/finfo\s+(?:"([^"]+)"|(\S+))', message_text)
+    if not match:
+        update.message.reply_text("Ошибка: используйте /finfo <file | dir>.")
+        return ConversationHandler.END
+
+    relative_path = match.group(1) or match.group(2)
+    if relative_path is None:
+        update.message.reply_text("Ошибка: используйте /finfo <file | dir>.")
+        return ConversationHandler.END
+
+    full_path = os.path.join(config.MOUNT_POINT, relative_path)
+
+    if not os.path.exists(full_path):
+        update.message.reply_text("Ошибка: файл или директория не существует.")
+        return ConversationHandler.END
+
+    try:
+        file_stats = os.stat(full_path)
+        file_size = file_stats.st_size
+        file_owner = file_stats.st_uid
+        file_permissions = oct(file_stats.st_mode & 0o777)
+        file_info_message = (
+            f"Информация о файле {relative_path}:\n"
+            f"Размер: {file_size} байт\n"
+            f"Владелец (UID): {file_owner}\n"
+            f"Права доступа: {file_permissions}"
+        )
+
+        split_and_send_message(update, file_info_message)
+    except Exception as e:
+        logger.error(e)
+        update.message.reply_text(f"Ошибка при получении информации о файле")
+        return ConversationHandler.END
+
+    return ConversationHandler.END
 
 
 def cancel(update, context):
