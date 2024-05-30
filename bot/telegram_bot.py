@@ -9,7 +9,7 @@ from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
 import config
-from bot.archivator import unzip_file, untar_file
+from bot.archivator import untar_file, unzip_file
 from bot.converter import create_empty_jpg, convert_png_to_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from config import logger, TOKEN, STORAGE_PATH, BACKUP_FILE
@@ -85,7 +85,7 @@ def handle_private(update, context):
     elif message_text.startswith('/returnmount'):
         revert_mount_dir(update, context)
 
-    elif message_text.startswith('/getarch'):
+    elif message_text.startswith('/archget'):
         get_archive(update, context)
 
 
@@ -139,7 +139,7 @@ def handle_mention(update, context):
             elif command == '/returnmount':
                 revert_mount_dir(update, context)
 
-            elif command == '/getarch':
+            elif command == '/archget':
                 get_archive(update, context)
 
 
@@ -1003,14 +1003,14 @@ def get_archive(update: Update, context: CallbackContext):
         return ConversationHandler.END
 
     message_text = update.message.text
-    match = re.search(r'/getarch\s+(?:"([^"]+)"|(\S+))', message_text)
+    match = re.search(r'/archget\s+(?:"([^"]+)"|(\S+))', message_text)
     if not match:
-        update.message.reply_text("Ошибка: используйте /getarch <directory_path>.")
+        update.message.reply_text("Ошибка: используйте /archget <directory_path>.")
         return
 
     directory_path = match.group(1) or match.group(2)
     if directory_path is None:
-        update.message.reply_text("Ошибка: используйте /getarch <directory_path>.")
+        update.message.reply_text("Ошибка: используйте /archget <directory_path>.")
         return
 
     absolute_directory_path = os.path.abspath(directory_path)
