@@ -1,5 +1,7 @@
 import yaml
 
+from config import logger
+
 
 def parse_directory_listing(yaml_file):
     try:
@@ -19,9 +21,9 @@ def parse_directory_listing(yaml_file):
 
             return directory_listing_commands
     except FileNotFoundError:
-        print("Файл не найден.")
+        logger.error('FileNotFoundError')
         return []
     except yaml.YAMLError as exc:
-        print(exc)
+        logger.error(f'{exc}')
         return []
 

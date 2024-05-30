@@ -1155,7 +1155,8 @@ def custom_list_files(update, context):
         for command in commands:
             if command != "pass":
                 full_command = f"{command}"
-                result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=directory_path)
+                result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                          cwd=directory_path)
                 output, error = result.communicate()
                 outputs.append(output.decode())
                 if error:
@@ -1174,10 +1175,12 @@ def custom_list_files(update, context):
                         update.message.reply_text(f"Ошибка при выполнении команды: {error.decode()}")
                         return ConversationHandler.END
                 except Exception as e:
-                    update.message.reply_text(f"Произошла ошибка при выполнении команды: {str(e)}")
+                    logger.error(f'{e}')
+                    update.message.reply_text(f"Произошла ошибка при выполнении команды")
                     return ConversationHandler.END
     except Exception as e:
-        update.message.reply_text(f"Произошла ошибка при выполнении команды: {str(e)}")
+        logger.error(f'{e}')
+        update.message.reply_text(f"Произошла ошибка при выполнении команды")
         return ConversationHandler.END
 
     message_text = '\n'.join(outputs)
