@@ -31,7 +31,7 @@ custom_config_path = ''
 
 
 def help_command(update: Update, context):
-    if context.args and context.args[0] == "-b":
+    if '-b' in update.message.text:
         text = "(Help) I need somebody\n(Help) Not just anybody\n(Help) You know I need someone\n(Help!)"
         update.message.reply_text(text)
         return ConversationHandler.END
