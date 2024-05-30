@@ -1,4 +1,6 @@
+import grp
 import os
+import pwd
 import shutil
 import subprocess
 import tarfile
@@ -205,19 +207,25 @@ def file_info(update: Update, context: CallbackContext) -> int:
     try:
         file_stats = os.stat(full_path)
         file_size = file_stats.st_size
-        file_owner = file_stats.st_uid
-        file_permissions = oct(file_stats.st_mode & 0o777)
+        file_owner = pwd.getpwuid(file_stats.st_uid).pw_name
+        file_group = grp.getgrgid(file_stats.st_gid).gr_name
+        file_permissions_octal = oct(file_stats.st_mode & 0o777)
+
+        file_type = 'Файл' if os.path.isfile(full_path) else 'Директория' if os.path.isdir(
+            full_path) else 'Символическая ссылка' if os.path.islink(full_path) else 'Другой'
+
         file_info_message = (
-            f"Информация о файле {relative_path}:\n"
+            f"Информация о {file_type.lower()} {relative_path}:\n"
             f"Размер: {file_size} байт\n"
-            f"Владелец (UID): {file_owner}\n"
-            f"Права доступа: {file_permissions}"
+            f"Владелец: {file_owner}\n"
+            f"Группа: {file_group}\n"
+            f"Права доступа: {file_permissions_octal}\n"
         )
 
         split_and_send_message(update, file_info_message)
     except Exception as e:
         logger.error(e)
-        update.message.reply_text(f"Ошибка при получении информации о файле")
+        update.message.reply_text("Ошибка при получении информации о файле")
         return ConversationHandler.END
 
     return ConversationHandler.END
