@@ -1437,12 +1437,20 @@ def custom_get_document(update, context):
                 if action == 'exit 0':
                     update.message.reply_text(f"Чтение файла {relative_path} запрещено.")
                     return ConversationHandler.END
+                elif action == 'exit 1':
+                    return ConversationHandler.END
                 elif action != 'pass':
                     full_command = action.format(filename=relative_path)
                     result = subprocess.Popen(full_command, shell=True, stdout=subprocess.PIPE,
                                               stderr=subprocess.PIPE, cwd=custom_mount_point)
                     output, error = result.communicate()
                     message_text = output.decode()
+                    if action.startswith('pandoc') and 'temp_file.pdf' in full_command:
+                        pdf_path = os.path.join(custom_mount_point, 'temp_file.pdf')
+                        if os.path.exists(pdf_path):
+                            with open(pdf_path, 'rb') as pdf_file:
+                                update.message.reply_document(document=pdf_file)
+                            os.remove(pdf_path)
                     if message_text:
                         split_and_send_message(update, message_text)
                     if error:
