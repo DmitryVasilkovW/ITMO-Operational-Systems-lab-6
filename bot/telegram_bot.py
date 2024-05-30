@@ -12,7 +12,7 @@ from telegram import Update, MessageEntity, Bot
 from telegram.ext import CallbackContext, ConversationHandler
 
 import config
-from bot.archivator import untar_file, unzip_file, delete_file_from_zip, delete_file_from_tar
+from bot.archivator import untar_file, unzip_file, delete_file_from_zip, delete_file_from_tar, delete_file_from_archive
 from bot.converter import create_empty_jpg, convert_png_to_jpg
 from bot.collect_metadata import save_metadata_to_storage, get_ctime, get_mtime
 from bot.custom_fs_utils import custom_start_fuse, custom_unmount_fs
@@ -1692,14 +1692,8 @@ def archive_file_deliter(update: Update, context: CallbackContext):
         update.message.reply_text(f"Ошибка: архив {archive_path} не найден или не является архивом.")
         return
 
-    new_archive_path = get_unique_name(absolute_archive_path)
-
     try:
-        if absolute_archive_path.endswith('.zip'):
-            delete_file_from_zip(absolute_archive_path, file_name)
-        elif absolute_archive_path.endswith('.tar'):
-            delete_file_from_tar(absolute_archive_path, file_name)
-
+        delete_file_from_archive(absolute_archive_path, file_name)
         update.message.reply_text(f"Файл {file_name} удален из архива.")
         logger.info(f"File {file_name} deleted from archive {absolute_archive_path} by user {update.message.from_user.id}")
 
@@ -1708,3 +1702,4 @@ def archive_file_deliter(update: Update, context: CallbackContext):
         logger.error(f"Exception in archive_file_deliter: {e}")
 
     return ConversationHandler.END
+
