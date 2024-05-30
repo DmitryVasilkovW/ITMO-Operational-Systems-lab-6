@@ -27,6 +27,39 @@ custom_mount_point = ''
 custom_config_path = ''
 
 
+def help_command(update: Update, context):
+    if context.args and context.args[0] == "-b":
+        text = "(Help) I need somebody\n(Help) Not just anybody\n(Help) You know I need someone\n(Help!)"
+        update.message.reply_text(text)
+        return ConversationHandler.END
+    else:
+        commands = [
+            "/start - запуск ФС после остановки",
+            "/stop - остановка ФС",
+            "/mkdir <dir> - создание директории",
+            "/save <dir> - отправка файла на сервер",
+            "/get <file> - получение файла от сервера",
+            "/cp <src> <dst> - копирование файла или директории ",
+            "/mv <src> <dst> - перемещение файла или директории",
+            "/ls <dir> - листинг с тегами",
+            "/trls <dir> - листинг деревом",
+            "/rm <file | dir> - удаление файла или директории",
+            "/getdir <dir> - получении директории от сервера",
+            "/ctime' <file | dir> - время создания файла или директории",
+            "/mtime <file | dir> - время изменения файла или директории",
+            "/group <srs> <dir> - группировка mp3",
+            "/ungroup - удаление группировки mp3",
+            "/convert <dir> - подключение  директории для конвертации",
+            "/c_start <mount> <conf> - подключение кастомной ФС",
+            "/c_stop - отключение кастомной ФС",
+            "/c_ls <dir> - листинг кастомной ФС",
+            "/c_save <dir> - отправка файла на кастомную ФС сервера",
+            "/c_get <file> - получение файла из кастомной ФС сервера"
+        ]
+        update.message.reply_text("\n".join(commands))
+        return ConversationHandler.END
+
+
 def check_custom_fuse(update):
     if custom_fuse_stopped:
         update.message.reply_text('Кастомная файловая система не активна.')
@@ -115,7 +148,7 @@ def handle_private(update, context):
     elif message_text.startswith('/group'):
         group_files(update, context)
 
-    elif message_text.startswith('/rmgroup'):
+    elif message_text.startswith('/ungroup'):
         rm_group(update, context)
 
     elif message_text.startswith('/c_start'):
@@ -129,6 +162,9 @@ def handle_private(update, context):
 
     elif message_text.startswith('/c_get'):
         custom_get_document(update, context)
+
+    elif message_text.startswith('/help'):
+        help_command(update, context)
 
 
 def handle_mention(update, context):
@@ -178,7 +214,7 @@ def handle_mention(update, context):
             elif command == '/group':
                 group_files(update, context)
 
-            elif command == '/rmgroup':
+            elif command == '/ungroup':
                 rm_group(update, context)
 
             elif command == '/c_start':
@@ -192,6 +228,9 @@ def handle_mention(update, context):
 
             elif command == '/c_get':
                 custom_get_document(update, context)
+
+            elif command == '/help':
+                help_command(update, context)
 
 
 def cancel(update, context):
@@ -1046,7 +1085,7 @@ def rm_group(update: Update, context: CallbackContext):
     if check_fuse(update) is ConversationHandler.END:
         return ConversationHandler.END
 
-    if re.search(r'/rmgroup\s+(\S+)', update.message.text):
+    if re.search(r'/ungroup\s+(\S+)', update.message.text):
         update.message.reply_text("Ошибка: используйте /rmgroup без аргументов")
         return ConversationHandler.END
 
