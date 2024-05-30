@@ -111,6 +111,7 @@ def check_mention(update, context) -> bool:
 
     return bot_username in entities
 
+
 def handle_private(update, context):
     message_text = update.message.text.split()[0]
     command_mapping = {
@@ -1607,4 +1608,3 @@ def get_archive(update: Update, context: CallbackContext):
     final_response = "\n".join(tree_lines)
 
     update.message.reply_text(f"<pre>{final_response}</pre>", parse_mode='HTML')
-    
