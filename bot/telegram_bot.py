@@ -55,6 +55,7 @@ def help_command(update: Update, context):
             "/group <srs> <dir> - группировка mp3",
             "/ungroup - удаление группировки mp3",
             "/archget <dir> - получений разархивированных копий директории dir",
+            "/archdel <file name.ext> <srs> - удаление файла из архива",
             "/convert <dir> - подключение  директории для конвертации",
             "/c_start <mount> <conf> - подключение кастомной ФС",
             "/c_stop - отключение кастомной ФС",
@@ -138,7 +139,6 @@ def handle_private(update, context):
         '/c_get': custom_get_document,
         '/help': help_command,
         '/finfo': file_info,
-        '/archget': get_archive,
         '/archdel': archive_file_deliter,
     }
 
@@ -181,7 +181,6 @@ def handle_mention(update, context):
                 '/c_get': custom_get_document,
                 '/help': help_command,
                 '/finfo': file_info,
-                '/archget': get_archive,
                 '/archdel': archive_file_deliter,
             }
 
