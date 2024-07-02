@@ -1,4 +1,4 @@
-# lab6_any_os_hard (1)
+# lab6_any_os_hard
 
 # FUSE (Filesystem in userspace)
 
